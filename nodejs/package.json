@@ -1,0 +1,17 @@
+{
+  "name": "ethereum-bridge",
+  "version": "0.0.1",
+  "description": "Ethereum logs listener to connect Oraclize onchain events to the Oraclize offchain engine",
+  "main": "plugin.js",
+  "dependencies": {
+    "request": "~2.72.0",
+    "stdio": "~0.2.7",
+    "web3": "~0.15.3"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC"
+}

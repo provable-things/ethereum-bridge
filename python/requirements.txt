@@ -1,0 +1,4 @@
+base58 == 0.2.3
+ethereum_abi_utils == 0.2.1
+web3 == 0.1.9
+Requests == 2.10.0
