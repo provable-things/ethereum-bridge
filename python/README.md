@@ -3,6 +3,11 @@ Clone the repo with `git clone --recursive`
 
 (to download all the submodules)
 
+####Note
+(on Ubuntu)
+
+run `sudo apt-get install git python-pip python-dev nodejs-legacy npm -y`
+
 ###Install
 ```
 pip install -r requirements.txt
