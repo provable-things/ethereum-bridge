@@ -45,8 +45,11 @@ def jrpcReq(content,params=[]):
 	if(r.status_code!=200):
 		print 'JSONRPC request error'
 		return
-	x = json.loads(r.text)
-        return x['result']
+	parsedResponse = json.loads(r.text)
+	if('error' in parsedResponse):
+		sys.exit('JSONRPC error')
+	else:
+		return parsedResponse['result']
 
 parser = argparse.ArgumentParser()
 
@@ -112,7 +115,7 @@ def queryComplete(gasLimit, myid, result, proof, contractAddr):
 		output = abiEncode(myid,resultName)
 
 		encodedAbi = '0x27dc297e'+output
-		jrpcReq('eth_sendTransaction',[{"from":fromx,"gas":hex(gasLimit),"value":"0x00","data":encodedAbi,"to":contractAddr}])
+		jrpcReq('eth_sendTransaction',[{"from":fromx,"gas":hex(gasLimit),"value":"0x00","data":encodedAbi,"to":'0x'+contractAddr}])
 	else:
 		initialproof = proof
 		proof = base58.b58decode(proof).encode('hex')
@@ -138,12 +141,13 @@ def queryComplete(gasLimit, myid, result, proof, contractAddr):
 
 		encodedAbi = '0x38bbfa50'+output
 
-		jrpcReq('eth_sendTransaction',[{"from":fromx,"gas":hex(gasLimit),"value":"0x00","data":encodedAbi,"to":contractAddr}])
+		jrpcReq('eth_sendTransaction',[{"from":fromx,"gas":hex(gasLimit),"value":"0x00","data":encodedAbi,"to":'0x'+contractAddr}])
 	if(proof is not None):
 		print('proof: '+initialproof)
 	print('myid: '+initialmyid)
 	print('result: '+initialresult)
-	print('Contract '+contractAddr+ ' __callback called')
+	print('Contract 0x'+contractAddr+ ' __callback called')
+	return
 
 def handleLog(data):
 	global myid
@@ -243,9 +247,12 @@ def OARgenerate():
 	global contract
 	global dataB
 	dataB = dataB['code']
-	contractOAR = jrpcReq('eth_sendTransaction',[{"from":fromx,"gas":"0x2dc6c0","value":"0x00","data":"0x"+dataB}])
+	contractOARtx = jrpcReq('eth_sendTransaction',[{"from":fromx,"gas":"0x2dc6c0","value":"0x00","data":"0x"+dataB.replace('0x','')}])
 	sleep(0.5)
-	contractOAR = jrpcReq('eth_getTransactionReceipt', [contractOAR])
+	contractOAR = jrpcReq('eth_getTransactionReceipt', [contractOARtx])
+	while contractOAR is None:
+		contractOAR = jrpcReq('eth_getTransactionReceipt', [contractOARtx])
+		sleep(2.5)
 	oraclizeOAR = str(contractOAR['contractAddress'])
 	sign4byte = '0xd1d80fdf' #setAddr(address)
 	fillZero = '00000000'
@@ -261,9 +268,12 @@ def generateOraclize():
 	global contract
 	global dataC
 	dataC = dataC['code']
-	contract = jrpcReq('eth_sendTransaction',[{"from":fromx,"gas":"0x2dc6c0","value":"0x00","data":"0x"+dataC}])
+	contracttx = jrpcReq('eth_sendTransaction',[{"from":fromx,"gas":"0x2dc6c0","value":"0x00","data":"0x"+dataC.replace('0x','')}])
 	sleep(0.5)
-	contract = jrpcReq('eth_getTransactionReceipt', [contract])
+	contract = jrpcReq('eth_getTransactionReceipt', [contracttx])
+	while contract is None:
+		contract = jrpcReq('eth_getTransactionReceipt', [contracttx])
+		sleep(2.5)
 	oraclizeC = str(contract['contractAddress'])
 	OARgenerate()
 
