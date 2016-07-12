@@ -31,6 +31,7 @@ contract test() {
 }
 ```
 
+**Note:** Account 1 will be used to deploy the Oraclize OAR and Connector, make sure to not deploy contracts that use Oraclize on the same account.
 
 * optional:
   * to specify the OAR address use `node plugin --oar EnterYourOarCustomAddress`

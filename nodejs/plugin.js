@@ -67,8 +67,9 @@ console.log('eth node: '+defaultnode);
 
 var web3 = new Web3();
 defaultnode = (url!='') ? url:'http://'+defaultnode;
+
 web3.setProvider(new web3.providers.HttpProvider(defaultnode));
-var from = web3.eth.accounts[0];
+var from = web3.eth.accounts[1];
 web3.eth.defaultAccount = from;
 
 loadContracts();
@@ -92,6 +93,10 @@ if(ops.oar){
 }
 
 function generateOraclize(){
+  if(web3.eth.getBalance(from)==0){
+      console.error('Account 1 should have enough balance to sustain tx gas cost');
+      return false;
+  }
   dataC = dataC['code'];
   contract = web3.eth.contract(abiOraclize).new({from:from,data:dataC,gas:3000000}, function(e, contract){
     if (typeof contract.address != 'undefined') {

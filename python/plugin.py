@@ -73,7 +73,7 @@ if(results.defaultnodePORT!='' and results.defaultnodePORT is not None):
 
 nodeSplit = defaultnode.split(':')
 web3 = Web3(RPCProvider(host='http://'+nodeSplit[0],port=nodeSplit[1]))
-fromx = jrpcReq('eth_accounts')[0]
+fromx = jrpcReq('eth_accounts')[1]
 web3.eth.defaultAccount = fromx
 loadContracts()
 print 'eth node: '+defaultnode
@@ -267,6 +267,8 @@ def generateOraclize():
 	global oraclizeC
 	global contract
 	global dataC
+	if(int(jrpcReq('eth_getBalance',[fromx,'latest']),16)==0):
+		sys.exit('Account 1 should have enough balance to sustain tx gas cost')
 	dataC = dataC['code']
 	contracttx = jrpcReq('eth_sendTransaction',[{"from":fromx,"gas":"0x2dc6c0","value":"0x00","data":"0x"+dataC.replace('0x','')}])
 	sleep(0.5)
