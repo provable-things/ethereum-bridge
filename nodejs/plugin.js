@@ -9,13 +9,16 @@ var addr = '',
     oraclizeOAR = '',
     contract,
     defaultnode = 'localhost:8545',
-    url = '';
+    url = '',
+    listenOnlyMode = false;
 
 var ops = stdio.getopt({
     'oar': {key: 'o', args: 1, description: 'OAR Oraclize (address)'},
     'url': {key: 'u', args: 1, description: 'eth node URL (default: http://localhost:8545)'},
-    'HOST': {key: 'H', args:1, description: 'eth node IP:PORT (default: localhost:8545)'},
-    'port': {key: 'p', args:1, description: 'eth node localhost port (default 8545)'}
+    'HOST': {key: 'H', args: 1, description: 'eth node IP:PORT (default: localhost:8545)'},
+    'port': {key: 'p', args: 1, description: 'eth node localhost port (default 8545)'},
+    'address': {key: 'a', args: 1, description: 'unlocked address used to deploy Oraclize connector and OAR', mandatory:true},
+    'abipath': {args: 2, description: 'Oraclize OAR abi and Oraclize Connector abi definition path'}
 });
 
 if(ops.HOST){
@@ -69,10 +72,52 @@ var web3 = new Web3();
 defaultnode = (url!='') ? url:'http://'+defaultnode;
 
 web3.setProvider(new web3.providers.HttpProvider(defaultnode));
-var from = web3.eth.accounts[1];
-web3.eth.defaultAccount = from;
 
-loadContracts();
+var from;
+if(ops.address){
+  var addressUser = ops.address;
+  if(web3.isAddress(addressUser)){
+    console.log('Using '+addressUser+' to act as Oraclize, make sure is it unlocked and do not use the same address to deploy your contracts');
+    from = addressUser;
+    web3.eth.defaultAccount = from;
+  } else {
+    if(addressUser==-1){
+        listenOnlyMode = true;
+        console.log("*** Listen only mode");
+    } else {
+        if(addressUser>0 && addressUser<1000){
+          from = web3.eth.accounts[addressUser];
+          web3.eth.defaultAccount = from;
+          console.log('Using '+from+' to act as Oraclize, make sure is it unlocked and do not use the same address to deploy your contracts');
+        } else {
+          console.error('Error, address is not valid');
+          return false;
+        }
+    }
+  }
+}
+
+if(ops.abipath){
+  var abiListPath = ops.abipath;
+  if(abiListPath.length==2){
+    var abiDefinition1 = JSON.parse(fs.readFileSync(path.resolve(abiListPath[0])).toString());
+    var abiDefinition2 = JSON.parse(fs.readFileSync(path.resolve(abiListPath[1])).toString());
+    if(abiDefinition1.length<abiDefinition2.length){
+      abi = abiDefinition1;
+      abiOraclize = abiDefinition2;
+    } else {
+      abiOraclize = abiDefinition1;
+      abi = abiDefinition2;
+    }
+  } else {
+      console.error('Error, required 2 path');
+      return false;
+  }
+} else {
+  if(!listenOnlyMode){
+    loadContracts();
+  }
+}
 
 if(ops.oar){
   var addressOAR = (ops.oar).trim();
@@ -82,14 +127,25 @@ if(ops.oar){
       oraclizeOAR = addressOAR;
       console.log('OAR Address: '+oraclizeOAR);
       console.log('Make sure you have this line in your contract constructor:\n\n'+'OAR = OraclizeAddrResolverI('+oraclizeOAR+');\n\n');
-      runLog();
+      if(!listenOnlyMode) runLog();
     } else {
       console.error('The address provided is not valid');
       return false;
     }
   }
 } else {
-  generateOraclize();
+  if(!listenOnlyMode){
+    generateOraclize();
+  }
+}
+
+if(listenOnlyMode && ops.oar && ops.abipath){
+  runLog();
+} else {
+    if(listenOnlyMode){
+      console.error('Listen only mode require the oar and abi path');
+      return false;
+    }
 }
 
 function generateOraclize(){
@@ -209,23 +265,25 @@ function runLog(){
 }
 
 function queryComplete(gasLimit, myid, result, proof, contractAddr){
-  if(proof==null){
-    var callbackDefinition = [{"constant":false,"inputs":[{"name":"myid","type":"bytes32"},{"name":"result","type":"string"}],"name":"__callback","outputs":[],"type":"function"},{"inputs":[],"type":"constructor"}];
-    web3.eth.contract(callbackDefinition).at(contractAddr).__callback(myid,result,{from:from,gas:gasLimit,value:0}, function(e, contract){
-      if(e){
-        console.log(e);
-      }
-    });
-  } else {
-    var callbackDefinition = [{"constant":false,"inputs":[{"name":"myid","type":"bytes32"},{"name":"result","type":"string"},{"name":"proof","type":"bytes"}],"name":"__callback","outputs":[],"type":"function"},{"inputs":[],"type":"constructor"}];
-    web3.eth.contract(callbackDefinition).at(contractAddr).__callback(myid,result,proof,{from:from,gas:gasLimit,value:0}, function(e, contract){
-      if(e){
-        console.log(e);
-      }
-    });
-    console.log('proof: '+proof);
+  if(!listenOnlyMode){
+    if(proof==null){
+      var callbackDefinition = [{"constant":false,"inputs":[{"name":"myid","type":"bytes32"},{"name":"result","type":"string"}],"name":"__callback","outputs":[],"type":"function"},{"inputs":[],"type":"constructor"}];
+      web3.eth.contract(callbackDefinition).at(contractAddr).__callback(myid,result,{from:from,gas:gasLimit,value:0}, function(e, contract){
+        if(e){
+          console.log(e);
+        }
+      });
+    } else {
+      var callbackDefinition = [{"constant":false,"inputs":[{"name":"myid","type":"bytes32"},{"name":"result","type":"string"},{"name":"proof","type":"bytes"}],"name":"__callback","outputs":[],"type":"function"},{"inputs":[],"type":"constructor"}];
+      web3.eth.contract(callbackDefinition).at(contractAddr).__callback(myid,result,proof,{from:from,gas:gasLimit,value:0}, function(e, contract){
+        if(e){
+          console.log(e);
+        }
+      });
+      console.log('proof: '+proof);
+    }
   }
   console.log('myid: '+myid);
   console.log('result: '+result);
-  console.log('Contract '+contractAddr+ ' __callback called');
+  (!listenOnlyMode) ? console.log('Contract '+contractAddr+ ' __callback called'):console.log('Contract __callback not called (listen only mode)');
 }
