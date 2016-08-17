@@ -10,8 +10,10 @@ npm install
 
 ###How to use
 ```
-node plugin
+node plugin -a 1
 ```
+(will start the ethereum-bridge with the account at position 1 (you can also use an hex encoded address))
+
 
 **Follow the console message**
 
@@ -31,7 +33,7 @@ contract test() {
 }
 ```
 
-**Note:** Account 1 will be used to deploy the Oraclize OAR and Connector, make sure to not deploy contracts that use Oraclize on the same account.
+**Note:** The address chosen will be used to deploy the Oraclize OAR and Connector, make sure to not deploy contracts that use Oraclize on the same address.
 
 * optional:
   * to specify the OAR address use `node plugin --oar EnterYourOarCustomAddress`
