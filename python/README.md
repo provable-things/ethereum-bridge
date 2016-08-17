@@ -18,8 +18,9 @@ npm install -g ethereumjs-abi
 
 ###How to use
 ```
-python plugin.py
+python plugin.py -a 1
 ```
+(will start the ethereum-bridge with the account at position 1 (you can also use an hex encoded address))
 
 **Follow the console message**
 
@@ -39,13 +40,10 @@ contract test() {
 }
 ```
 
-**Note:** Account 1 will be used to deploy the Oraclize OAR and Connector, make sure to not deploy contracts that use Oraclize on the same account.
+**Note:** The address chosen will be used to deploy the Oraclize OAR and Connector, make sure to not deploy contracts that use Oraclize on the same address.
 
 * optional:
   * to specify the OAR address use `python plugin.py --oar EnterYourOarCustomAddress`
   * change the default eth node with `python plugin.py -H IP:PORT`
   * change the default PORT on localhost with `python plugin.py -p PORT`
-
-
-
-  
+  * load the abi definition of OAR and Connector from a file `python plugin.py --abipath /tmp/abiOAR.json /tmp/abiConnector.json`
