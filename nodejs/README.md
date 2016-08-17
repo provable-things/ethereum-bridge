@@ -39,7 +39,4 @@ contract test() {
   * to specify the OAR address use `node plugin --oar EnterYourOarCustomAddress`
   * change the default eth node with `node plugin -H IP:PORT`
   * change the default PORT on localhost with `node plugin -p PORT`
-
-
-
-  
+  * load the abi definition of OAR and Connector from a file `node plugin --abipath /tmp/abiOAR.json /tmp/abiConnector.json`
