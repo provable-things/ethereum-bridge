@@ -15,14 +15,16 @@ oraclizeC = ''
 oraclizeOAR = ''
 contract = {}
 defaultnode = 'localhost:8545'
+listenOnlyMode = False
+abiOraclize = {}
+abi = {}
 
 def loadContracts():
 	global OARsource
 	global OCsource
 	global dataB
-	global abi
 	global dataC
-	global abiOraclize
+
 	try:
 		OCsource = open('ethereum-api/connectors/oraclizeConnector.sol','r').read()
 		cbLine = re.findall('\+?(cbAddress = 0x.*)\;',OCsource)[0]
@@ -47,6 +49,7 @@ def jrpcReq(content,params=[]):
 		return
 	parsedResponse = json.loads(r.text)
 	if('error' in parsedResponse):
+		print r.text
 		sys.exit('JSONRPC error')
 	else:
 		return parsedResponse['result']
@@ -56,6 +59,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--oar',action='store',dest='oraclizeOAR',help='OAR Oraclize (address)')
 parser.add_argument('-H',action='store',dest='defaultnodeIPPORT',help='eth node IP:PORT (default: localhost:8545)')
 parser.add_argument('-p',action='store',dest='defaultnodePORT',help='eth node localhost port (default 8545)')
+parser.add_argument('-a',action='store',dest='fromx',help='unlocked address used to deploy Oraclize connector and OAR', required=True)
+parser.add_argument('--abipath',action='store',dest='abipath',nargs='+',help='Oraclize OAR abi and Oraclize Connector abi definition path')
 
 results = parser.parse_args()
 
@@ -73,9 +78,44 @@ if(results.defaultnodePORT!='' and results.defaultnodePORT is not None):
 
 nodeSplit = defaultnode.split(':')
 web3 = Web3(RPCProvider(host='http://'+nodeSplit[0],port=nodeSplit[1]))
-fromx = jrpcReq('eth_accounts')[1]
-web3.eth.defaultAccount = fromx
-loadContracts()
+fromx = ''
+
+if(results.fromx):
+	addressUser = results.fromx
+	if(web3.isAddress(addressUser)):
+		print "Using %s to act as Oraclize, make sure it's unlocked and do not use the same address to deploy your contracts" % (addressUser)
+		fromx = addressUser
+		web3.eth.defaultAccount = fromx
+	else:
+		if(addressUser=="-1"):
+			listenOnlyMode = True
+			print "*** Listen only mode"
+		else:
+			addressUserInt = int(addressUser)
+			if(addressUserInt>=0 and addressUserInt<1000):
+				fromx = jrpcReq('eth_accounts')[addressUserInt]
+				web3.eth.defaultAccount = fromx
+				print "Using %s to act as Oraclize, make sure it's unlocked and do not use the same address to deploy your contracts" % (fromx)
+			else:
+				sys.exit("Error, address is not valid")
+
+if(results.abipath):
+	abiListPath = results.abipath
+	if(len(abiListPath)==2):
+		abiDef1 = open(abiListPath[0],'r').read()
+		abiDef2 = open(abiListPath[1],'r').read()
+		if(len(abiDef1)<len(abiDef2)):
+			abi = abiDef1
+			abiOraclize = abiDef2
+		else:
+			abiOraclize = abiDef1
+			abi = abiDef2
+	else:
+		sys.exit("Error, required 2 path")
+else:
+	if(not listenOnlyMode):
+		loadContracts()
+
 print 'eth node: '+defaultnode
 
 def abiEncode(myid,resultName,proofName='none'):
@@ -102,51 +142,55 @@ def checkQueryStatus(queryId, callback):
 def queryComplete(gasLimit, myid, result, proof, contractAddr):
 	initialmyid = myid
 	initialresult = result
-	if(proof is None):
-		myid = myid.ljust(2*32*(1+(len(myid)/2)/32),"0")
-		result = str(result).encode('hex')
+	if(not listenOnlyMode):
+		if(proof is None):
+			myid = myid.ljust(2*32*(1+(len(myid)/2)/32),"0")
+			result = str(result).encode('hex')
 
-		result = [int(i, 16) for i in re.findall("..", result)]
+			result = [int(i, 16) for i in re.findall("..", result)]
 
-		resultName = tempfile.NamedTemporaryFile().name
-		file = open(resultName,"w")
-		file.write(json.dumps(result))
-		file.close()
-		output = abiEncode(myid,resultName)
+			resultName = tempfile.NamedTemporaryFile().name
+			file = open(resultName,"w")
+			file.write(json.dumps(result))
+			file.close()
+			output = abiEncode(myid,resultName)
 
-		encodedAbi = '0x27dc297e'+output
-		jrpcReq('eth_sendTransaction',[{"from":fromx,"gas":hex(gasLimit),"value":"0x00","data":encodedAbi,"to":'0x'+contractAddr}])
-	else:
-		initialproof = proof
-		proof = base58.b58decode(proof).encode('hex')
+			encodedAbi = '0x27dc297e'+output
+			jrpcReq('eth_sendTransaction',[{"from":fromx,"gas":hex(gasLimit),"value":"0x00","data":encodedAbi,"to":'0x'+contractAddr}])
+		else:
+			initialproof = proof
+			proof = base58.b58decode(proof).encode('hex')
 
-		myid = myid.ljust(2*32*(1+(len(myid)/2)/32),"0")
+			myid = myid.ljust(2*32*(1+(len(myid)/2)/32),"0")
 
-		result = str(result).encode('hex')
-		result = [int(i, 16) for i in re.findall("..", result)]
+			result = str(result).encode('hex')
+			result = [int(i, 16) for i in re.findall("..", result)]
 
-		resultName = tempfile.NamedTemporaryFile().name
-		file = open(resultName,"w")
-		file.write(json.dumps(result))
-		file.close()
+			resultName = tempfile.NamedTemporaryFile().name
+			file = open(resultName,"w")
+			file.write(json.dumps(result))
+			file.close()
 
-		proof = [int(i, 16) for i in re.findall("..", proof)]
+			proof = [int(i, 16) for i in re.findall("..", proof)]
 
-		proofName = tempfile.NamedTemporaryFile().name
-		file = open(proofName,"w")
-		file.write(json.dumps(proof))
-		file.close()
+			proofName = tempfile.NamedTemporaryFile().name
+			file = open(proofName,"w")
+			file.write(json.dumps(proof))
+			file.close()
 
-		output = abiEncode(myid,resultName,proofName)
+			output = abiEncode(myid,resultName,proofName)
 
-		encodedAbi = '0x38bbfa50'+output
+			encodedAbi = '0x38bbfa50'+output
 
-		jrpcReq('eth_sendTransaction',[{"from":fromx,"gas":hex(gasLimit),"value":"0x00","data":encodedAbi,"to":'0x'+contractAddr}])
-	if(proof is not None):
-		print('proof: '+initialproof)
+			jrpcReq('eth_sendTransaction',[{"from":fromx,"gas":hex(gasLimit),"value":"0x00","data":encodedAbi,"to":'0x'+contractAddr}])
+		if(proof is not None):
+			print('proof: '+initialproof)
 	print('myid: '+initialmyid)
 	print('result: '+initialresult)
-	print('Contract 0x'+contractAddr+ ' __callback called')
+	if(not listenOnlyMode):
+		print('Contract 0x'+contractAddr+ ' __callback called')
+	else:
+		print('Contract __callback called not called, listen only mode')
 	return
 
 def handleLog(data):
@@ -216,7 +260,7 @@ def runLog():
 	global oraclizeC
 
 	if(sys.getsizeof(contract)!=520 and sys.getsizeof(contract)>0):
-		oraclizeC = jrpcReq('eth_call',[{"from":fromx,"to":oraclizeOAR,"data":"0x38cc4831"}, "latest"]).replace('0x000000000000000000000000','0x')
+		oraclizeC = jrpcReq('eth_call',[{"to":oraclizeOAR,"data":"0x38cc4831"}, "latest"]).replace('0x000000000000000000000000','0x')
 
 	print('Listening @ '+oraclizeC)
 
@@ -243,7 +287,6 @@ def runLog():
 		k += 1
 
 def OARgenerate():
-	global oraclizeOAR
 	global contract
 	global dataB
 	dataB = dataB['code']
@@ -282,10 +325,17 @@ def generateOraclize():
 if(results.oraclizeOAR!='' and results.oraclizeOAR is not None):
 	if(web3.isAddress(results.oraclizeOAR)):
 		oraclizeOAR = results.oraclizeOAR
-		print('OAR Address: '+oraclizeOAR);
-		print('Make sure you have this line in your contract constructor:\n\n'+'OAR = OraclizeAddrResolverI('+oraclizeOAR+');\n\n');
-		runLog()
+		print('OAR Address: '+oraclizeOAR)
+		print('Make sure you have this line in your contract constructor:\n\n'+'OAR = OraclizeAddrResolverI('+oraclizeOAR+');\n\n')
+		if(not listenOnlyMode):
+			runLog()
 	else:
 		sys.exit('The address provided is not valid')
 else:
-	generateOraclize();
+	if(not listenOnlyMode):
+		generateOraclize()
+
+if(listenOnlyMode and results.oraclizeOAR and results.abipath):
+	runLog()
+else:
+	sys.exit('Listen only mode require the oar and abi path')
