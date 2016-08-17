@@ -85,7 +85,7 @@ if(ops.address){
         listenOnlyMode = true;
         console.log("*** Listen only mode");
     } else {
-        if(addressUser>0 && addressUser<1000){
+        if(addressUser>=0 && addressUser<1000){
           from = web3.eth.accounts[addressUser];
           web3.eth.defaultAccount = from;
           console.log('Using '+from+' to act as Oraclize, make sure is it unlocked and do not use the same address to deploy your contracts');
