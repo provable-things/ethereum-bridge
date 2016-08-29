@@ -219,8 +219,8 @@ function runLog(){
 
   function handleLog(data){
     data = data['args'];
-
-    var myid = myIdInitial = data['cid'];
+    var myIdInitial = data['cid'];
+    var myid = data['cid'];
     var cAddr = data['sender'];
     var ds = data['datasource'];
     if(typeof(data['arg']) != 'undefined'){
