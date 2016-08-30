@@ -222,7 +222,7 @@ function runLog(){
   function handleLog(data){
     data = data['args'];
     var myIdInitial = data['cid'];
-    var myid = data['cid'];
+    var myid = myIdInitial;
     var cAddr = data['sender'];
     var ds = data['datasource'];
     if(typeof(data['arg']) != 'undefined'){
