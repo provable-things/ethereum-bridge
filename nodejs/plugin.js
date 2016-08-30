@@ -53,11 +53,13 @@ function loadContracts(){
     OCsource = fs.readFileSync(path.resolve(__dirname, 'ethereum-api/connectors/oraclizeConnector.sol')).toString();
     var cbLine = OCsource.match(/\+?(cbAddress = 0x.*)\;/i)[0];
     OCsource = OCsource.replace(cbLine,'cbAddress = '+from+';');
-    dataC = web3.eth.compile.solidity(OCsource)['Oraclize'];
+    dataC = web3.eth.compile.solidity(OCsource);
+    dataC = dataC['Oraclize'] || dataC;
     abiOraclize = dataC['info']['abiDefinition'];
 
     OARsource = fs.readFileSync(path.resolve(__dirname, 'ethereum-api/connectors/addressResolver.sol')).toString();
-    dataB = web3.eth.compile.solidity(OARsource)['OraclizeAddrResolver'];
+    dataB = web3.eth.compile.solidity(OARsource);
+    dataB = dataB['OraclizeAddrResolver'] || dataB;
     abi = dataB['info']['abiDefinition'];
   } catch(e){
       if(e.code==='ENOENT'){
