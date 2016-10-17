@@ -1,8 +1,0 @@
-[submodule "nodejs/ethereum-api"]
-	path = nodejs/ethereum-api
-	url = https://github.com/oraclize/ethereum-api
-	branch = master
-[submodule "python/ethereum-api"]
-	path = python/ethereum-api
-	url = https://github.com/oraclize/ethereum-api
-	branch = master

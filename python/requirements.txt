@@ -1,5 +1,9 @@
+ethereum == 1.5.3
+web3 == 3.0.1
 base58 == 0.2.3
-sha3 == 0.2.1
 ethereum_abi_utils == 0.2.1
-web3 == 0.1.9
+pyopenssl == 16.2.0
+ndg-httpsclient == 0.4.2
+pyasn1 == 0.1.9
 Requests == 2.10.0
+sha3 == 0.2.1

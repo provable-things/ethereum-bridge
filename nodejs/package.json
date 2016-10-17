@@ -4,6 +4,12 @@
   "description": "Ethereum logs listener to connect Oraclize onchain events to the Oraclize offchain engine",
   "main": "plugin.js",
   "dependencies": {
+    "asn1": "^0.2.3",
+    "bs58": "^3.0.0",
+    "eth-lightwallet": "^2.5.2",
+    "ethereumjs-abi": "^0.6.4",
+    "ethereumjs-tx": "^1.1.2",
+    "ethereumjs-util": "^4.5.0",
     "request": "~2.72.0",
     "stdio": "~0.2.7",
     "web3": "~0.15.3"
@@ -13,5 +19,6 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
-  "license": "AGPL-3.0"
+  "license": "AGPL-3.0",
+  "private": true
 }

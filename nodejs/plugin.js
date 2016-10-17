@@ -1,31 +1,57 @@
+#!/usr/bin/env node
 var Web3 = require('web3')
 var stdio = require('stdio');
 var request = require('request');
 var fs = require('fs');
 var path = require('path');
+var ethTx = require('ethereumjs-tx');
+var ethUtil = require('ethereumjs-util');
+var ethAbi = require('ethereumjs-abi');
+var bs58 = require('bs58');
+var ethWallet = require('eth-lightwallet');
 
-var addr = '',
-    oraclizeC = '',
+var oraclizeC = '',
     oraclizeOAR = '',
     contract,
     defaultnode = 'localhost:8545',
     url = '',
-    listenOnlyMode = false;
+    listenOnlyMode = false,
+    privateKey = '',
+    addressNonce = '',
+    myIdList = [],
+    fallbackContractMode = false,
+    generateAddress = false,
+    mainAccount,
+    defaultGas = 3000000;
 
 var ops = stdio.getopt({
     'oar': {key: 'o', args: 1, description: 'OAR Oraclize (address)'},
-    'url': {key: 'u', args: 1, description: 'eth node URL (default: http://localhost:8545)'},
-    'HOST': {key: 'H', args: 1, description: 'eth node IP:PORT (default: localhost:8545)'},
-    'port': {key: 'p', args: 1, description: 'eth node localhost port (default 8545)'},
-    'address': {key: 'a', args: 1, description: 'unlocked address used to deploy Oraclize connector and OAR', mandatory:true},
-    'abipath': {args: 2, description: 'Oraclize OAR abi and Oraclize Connector abi definition path'}
+    'url': {key: 'u', args: 1, description: 'eth node URL (default: http://'+defaultnode+')'},
+    'HOST': {key: 'H', args: 1, description: 'eth node IP:PORT (default: '+defaultnode+')'},
+    'port': {key: 'p', args: 1, description: 'eth node localhost port (default: 8545)'},
+    'address': {key: 'a', args: 1, description: 'unlocked address used to deploy Oraclize connector and OAR'},
+    'broadcast': {description: 'broadcast only mode, a json key file with the private key is mandatory to sign all transactions'},
+    'gas': {args: 1, description: 'change gas amount limit used to deploy contracts(in wei) (default: '+defaultGas+')'},
+    'key': {args: 1, description: 'JSON key file path (default: current folder keys.json)'},
+    'nocomp': {description: 'disable contracts compilation'},
+    'forcecomp': {description: 'force contracts compilation'},
+    'loadabi': {description: 'Load default abi interface (under ethereum-bridge/contracts/abi)'}
 });
+
+if(ops.gas){
+  if(ops.gas<1970000){
+    throw new Error('Gas amount lower than 1970000 is not allowed');
+  } else if(ops.gas>4700000){
+    throw new Error('Gas amount bigger than 4700000 is not allowed');
+  } else {
+    defaultGas = ops.gas;
+  }
+}
 
 if(ops.HOST){
   var hostIPPORT = (ops.HOST).trim();
   if(hostIPPORT.indexOf(':')===-1) {
-    console.error('Error, port missing');
-    return false;
+    throw new Error('Error, port missing');
   } else {
     defaultnode = hostIPPORT;
   }
@@ -40,7 +66,52 @@ if(ops.url){
   url = ops.url;
 }
 
-// check contracts
+if(!ops.address && !ops.broadcast && ops.address!=-1){
+  //throw new Error('script started with no option, please choose between --address or --broadcast');
+  generateAddress = true;
+  console.log('no option choosen, generating a new address...\n');
+    var password = ethWallet.keystore.generateRandomSeed();
+    ethWallet.keystore.createVault({
+      password: password,
+    }, function (err, ks) {
+      ks.keyFromPassword(password, function (err, pwDerivedKey) {
+        if (err) throw err;
+        ks.generateNewAddress(pwDerivedKey, 1);
+        var addr = ks.getAddresses()[0];
+        mainAccount = '0x'+addr.replace('0x','');
+        var keyPath = (ops.key) ? ops.key : '../keys.json';
+        fs.readFile(keyPath, function read(err,data) {
+          keysFile = data;
+          if(err){
+            if(err.code=='ENOENT') keysFile = '';
+          }
+          var privateKeyExported = ks.exportPrivateKey(addr,pwDerivedKey);
+          privateKey = new Buffer(privateKeyExported,'hex');
+          var privateToSave = [privateKeyExported];
+          var accountPosition = 0;
+          if(keysFile && keysFile.length>0){
+            var privateToSave = privateKeyExported;
+            var keyObj = JSON.parse(keysFile.toString());
+            accountPosition = keyObj.length;
+            keyObj.push(privateToSave);
+            privateToSave = keyObj;
+          }
+          var contentToWrite = privateToSave;
+          fs.writeFile(keyPath, JSON.stringify(contentToWrite), function (err) {
+            if (err) return console.error(err);
+            console.log('Private key saved in '+keyPath+' file\n');
+            connectToWeb3();
+            loadContracts();
+            generateOraclize();
+          });
+          console.log('Generated address: '+addr+' - at position: '+accountPosition);
+          ops.broadcast = true;
+        });
+      });
+    });
+}
+
+// contracts var
 var OCsource,
     dataC,
     abiOraclize,
@@ -48,76 +119,171 @@ var OCsource,
     dataB,
     abi;
 
+/**
+ * @function
+ * @param {String} left  Version #1
+ * @param {String} right Version #2
+ * @return {Integer|Boolean}
+ * @author Alexey Bass (albass)
+ * @since 2011-07-14
+ */
+versionCompare = function(left, right) {
+    if (typeof left + typeof right != 'stringstring')
+        return false;
+    
+    var a = left.split('.')
+    ,   b = right.split('.')
+    ,   i = 0, len = Math.max(a.length, b.length);
+        
+    for (; i < len; i++) {
+        if ((a[i] && !b[i] && parseInt(a[i]) > 0) || (parseInt(a[i]) > parseInt(b[i]))) {
+            return 1;
+        } else if ((b[i] && !a[i] && parseInt(b[i]) > 0) || (parseInt(a[i]) < parseInt(b[i]))) {
+            return -1;
+        }
+    }
+    return 0;
+}
+
 function loadContracts(){
   try {
-    OCsource = fs.readFileSync(path.resolve(__dirname, 'ethereum-api/connectors/oraclizeConnector.sol')).toString();
-    var cbLine = OCsource.match(/\+?(cbAddress = 0x.*)\;/i)[0];
-    OCsource = OCsource.replace(cbLine,'cbAddress = '+from+';');
-    dataC = web3.eth.compile.solidity(OCsource);
-    dataC = dataC['Oraclize'] || dataC;
-    abiOraclize = dataC['info']['abiDefinition'];
+    var compilers = web3.eth.getCompilers();
 
-    OARsource = fs.readFileSync(path.resolve(__dirname, 'ethereum-api/connectors/addressResolver.sol')).toString();
-    dataB = web3.eth.compile.solidity(OARsource);
-    dataB = dataB['OraclizeAddrResolver'] || dataB;
-    abi = dataB['info']['abiDefinition'];
-  } catch(e){
+    if(!compilers) {
+      fallbackContracts();
+      return;
+    }
+    if(compilers.indexOf('solidity')==-1 && compilers.indexOf('Solidity')==-1){
+      fallbackContracts();
+      return;
+    }
+    var solidityVersion = web3.eth.compile.solidity("contract test{}");
+    solidityVersion = solidityVersion['test']['info']['compilerVersion'] || solidityVersion['info']['compilerVersion'];
+    solidityVersion = solidityVersion.substr(0,5);
+    if(versionCompare(solidityVersion,'0.2.2')==1 && (versionCompare(solidityVersion,'0.3.6')==-1 || versionCompare(solidityVersion,'0.3.6')==0)){
+      // solidity version is >= 0.2.2 and < 0.3.6
+      compileContracts();
+    } else fallbackContracts();
+  } catch (e){
+    console.log(e);
+    fallbackContracts();
+  }
+}
+
+function fallbackContracts(){
+  try {
+    if(!ops.oar){
+      console.log('Deploying contracts already pre-compiled (solc version not found/invalid)');
+      fallbackContractMode = true;
+    }
+    OCsource = fs.readFileSync(path.join(__dirname, '../contracts/binary/oraclizeConnector.binary')).toString();
+    abiOraclize = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../contracts/abi/oraclizeConnector.json')).toString());
+    dataC = OCsource;
+
+    OARsource = fs.readFileSync(path.join(__dirname, '../contracts/binary/addressResolver.binary')).toString();
+    abi = JSON.parse(fs.readFileSync(path.join(__dirname, '../contracts/abi/addressResolver.json')).toString());
+    dataB = OARsource;
+  } catch(e) {
       if(e.code==='ENOENT'){
-        console.error('Contracts file not found,\nDid your run git clone --recursive ?');
-        return false;
+        console.error('contract files not found');
+        process.exit(1);
+      } else {
+        console.error(e);
+        process.exit(1);
+      }
+  }
+}
+
+function compileContracts(){
+  if(!fallbackContractMode){
+    try {
+      OCsource = fs.readFileSync(path.join(__dirname, '../contracts/ethereum-api/connectors/oraclizeConnector.sol')).toString();
+      var cbLine = OCsource.match(/\+?(cbAddress = 0x.*)\;/i)[0];
+      OCsource = OCsource.replace(cbLine,'cbAddress = '+mainAccount+';');
+      var compiledConnector = web3.eth.compile.solidity(OCsource);
+      console.log(compiledConnector);
+      dataC = compiledConnector['Oraclize'] || compiledConnector;
+      var connectorObj = dataC;
+      dataC = dataC['code'];
+
+      OARsource = fs.readFileSync(path.join(__dirname, '../contracts/ethereum-api/connectors/addressResolver.sol')).toString();
+      var compiledOAR = web3.eth.compile.solidity(OARsource);
+      dataB = compiledOAR['OraclizeAddrResolver'] || compiledOAR;
+      var oarObj = dataB;
+      dataB = dataB['code'];
+
+      if(ops.loadabi){
+        abiOraclize = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../contracts/abi/oraclizeConnector.json')).toString());
+        abi = JSON.parse(fs.readFileSync(path.join(__dirname, '../contracts/abi/addressResolver.json')).toString());
+      } else {
+        abiOraclize = connectorObj['info']['abiDefinition'];
+        abi = oarObj['info']['abiDefinition'];
+      }
+    } catch(e){
+      if(e.code==='ENOENT'){
+        throw new Error('Contracts file not found,\nDid your run git clone --recursive ?');
       } else throw e;
     }
+  }
 }
-console.log('eth node: '+defaultnode);
 
 var web3 = new Web3();
-defaultnode = (url!='') ? url:'http://'+defaultnode;
+defaultnode = (url!='') ? url : 'http://'+defaultnode;
 
-web3.setProvider(new web3.providers.HttpProvider(defaultnode));
+if(!generateAddress) connectToWeb3();
 
-var from;
-if(ops.address){
+if(ops.address && !ops.broadcast){
   var addressUser = ops.address;
   if(web3.isAddress(addressUser)){
-    console.log('Using '+addressUser+' to act as Oraclize, make sure is it unlocked and do not use the same address to deploy your contracts');
-    from = addressUser;
-    web3.eth.defaultAccount = from;
+    console.log('Using '+addressUser+' to act as Oraclize, make sure it is unlocked and do not use the same address to deploy your contracts');
+    mainAccount = addressUser;
+    web3.eth.defaultAccount = mainAccount;
   } else {
     if(addressUser==-1){
         listenOnlyMode = true;
         console.log("*** Listen only mode");
     } else {
         if(addressUser>=0 && addressUser<1000){
-          from = web3.eth.accounts[addressUser];
-          web3.eth.defaultAccount = from;
-          console.log('Using '+from+' to act as Oraclize, make sure is it unlocked and do not use the same address to deploy your contracts');
+          mainAccount = web3.eth.accounts[addressUser];
+          web3.eth.defaultAccount = mainAccount;
+          console.log('Using '+mainAccount+' to act as Oraclize, make sure it is unlocked and do not use the same address to deploy your contracts');
         } else {
-          console.error('Error, address is not valid');
-          return false;
+          throw new Error('Error, address is not valid');
         }
     }
   }
+} else if(ops.broadcast) {
+  console.log('Broadcast mode active, a json key file is needed with your private in this format: ["privateKeyHex"]');
+  try {
+    var keyPath = (ops.key) ? ops.key:'../keys.json';
+    var privateKeyObj = JSON.parse(fs.readFileSync(keyPath).toString());
+    var accountIndex = (ops.address && ops.address>=0) ? ops.address : 0;
+    privateKey = privateKeyObj[accountIndex].replace('0x','');
+    privateKey = new Buffer(privateKey,'hex');
+    var publicKey = '0x'+ethUtil.privateToAddress(privateKey).toString('hex');
+    mainAccount = publicKey;
+    web3.eth.defaultAccount = mainAccount;
+    addressNonce = web3.eth.getTransactionCount(mainAccount);
+    console.log('Loaded '+mainAccount+' - at position: '+accountIndex);
+  } catch(e) {
+      if(e.code==='ENOENT'){
+        throw new Error('private key not found in '+keyPath+' make sure this is the right path');
+      } else throw new Error('Private key load error ',e);
+  }
 }
 
-if(ops.abipath){
-  var abiListPath = ops.abipath;
-  if(abiListPath.length==2){
-    var abiDefinition1 = JSON.parse(fs.readFileSync(path.resolve(abiListPath[0])).toString());
-    var abiDefinition2 = JSON.parse(fs.readFileSync(path.resolve(abiListPath[1])).toString());
-    if(abiDefinition1.length<abiDefinition2.length){
-      abi = abiDefinition1;
-      abiOraclize = abiDefinition2;
-    } else {
-      abiOraclize = abiDefinition1;
-      abi = abiDefinition2;
-    }
+if(!generateAddress){
+  if(ops.forcecomp){
+    compileContracts();
   } else {
-      console.error('Error, required 2 path');
-      return false;
-  }
-} else {
-  if(!listenOnlyMode){
-    loadContracts();
+    if(ops.oar && ops.loadabi){
+        abiOraclize = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../contracts/abi/oraclizeConnector.json')).toString());
+        abi = JSON.parse(fs.readFileSync(path.join(__dirname, '../contracts/abi/addressResolver.json')).toString());
+    } else {
+      if(!listenOnlyMode && !ops.nocomp){
+        loadContracts();
+      } else if(!listenOnlyMode && ops.nocomp) fallbackContracts();
+    }
   }
 }
 
@@ -131,58 +297,174 @@ if(ops.oar){
       console.log('Make sure you have this line in your contract constructor:\n\n'+'OAR = OraclizeAddrResolverI('+oraclizeOAR+');\n\n');
       if(!listenOnlyMode) runLog();
     } else {
-      console.error('The address provided is not valid');
-      return false;
+      throw new Error('The address provided is not valid');
     }
   }
 } else {
-  if(!listenOnlyMode){
+  if(!listenOnlyMode && !generateAddress){
     generateOraclize();
   }
 }
 
-if(listenOnlyMode && ops.oar && ops.abipath){
+if(listenOnlyMode && ops.oar && ops.loadabi && !generateAddress){
   runLog();
 } else {
     if(listenOnlyMode){
-      console.error('Listen only mode require the oar and abi path');
-      return false;
+      throw new Error('Listen only mode require the oar and abi path');
     }
+}
+
+function connectToWeb3(){
+  console.log('eth node: '+defaultnode);
+  console.log('Please wait...\n');
+  web3.setProvider(new web3.providers.HttpProvider(defaultnode));
+  if(!web3.isConnected()){
+    var nodeSplit = defaultnode.substring(defaultnode.indexOf('://')+3).split(':');
+    var portSplit = nodeSplit[1] || '8545';
+    var hostSplit = nodeSplit[0] || 'localhost';
+    var gethString = '--rpc --rpccorsdomain="*" --rpcaddr="'+hostSplit+'" --rpcport="'+portSplit+'"';
+    throw new Error(defaultnode+' ethereum node not found, are you sure is it running?\n if you are using:\n * geth, append: '+gethString+'\n * ethereumjs-testrpc, try: testrpc -H '+hostSplit+':'+portSplit+'\n\ncheck also if your node or this machine is allowed to connect (firewall,port etc..)\n');
+  }
 }
 
 function generateOraclize(){
-  if(web3.eth.getBalance(from)==0){
-      console.error('Account 1 should have enough balance to sustain tx gas cost');
-      return false;
-  }
-  dataC = dataC['code'];
-  contract = web3.eth.contract(abiOraclize).new({from:from,data:dataC,gas:3000000}, function(e, contract){
-    if (typeof contract.address != 'undefined') {
-      oraclizeC = contract.address;
-      OARgenerate();
+  var balance = web3.eth.getBalance(mainAccount).toNumber();
+  if(balance<50000000000000000){
+    console.log("\n"+mainAccount+" doesn't have enough funds to cover transaction costs, please send at least 0.05 ETH");
+    function checkFunds(){
+      balance = web3.eth.getBalance(mainAccount).toNumber();
+      if(balance<50000000000000000){
+        setTimeout(checkFunds,2500);
+      } else {
+        console.log('Deploying contracts, received '+(balance/1000000000000000000).toFixed(4)+' ETH');
+        generateOraclize();
       }
-   });
+    };
+    checkFunds();
+  } else {
+    if(ops.address && !ops.broadcast){
+      contract = web3.eth.contract(abiOraclize).new({},{from:mainAccount,data:dataC,gas:defaultGas}, function(e, contract){
+        if(e) console.log(e);
+        if (typeof contract.address != 'undefined') {
+          oraclizeC = contract.address;
+          if(fallbackContractMode){
+            web3.eth.contract(abiOraclize).at(oraclizeC).setCBaddress(mainAccount,{from:mainAccount,gas:defaultGas});
+          }
+          OARgenerate();
+        }
+       });
+    } else if(ops.broadcast){
+      addressNonce = web3.eth.getTransactionCount(mainAccount);
+      var rawTx = {
+        nonce: web3.toHex(addressNonce),
+        gasPrice: web3.toHex(web3.eth.gasPrice),
+        gasLimit: web3.toHex(defaultGas),
+        value: '0x00',
+        data: '0x'+dataC.replace('0x','')
+      };
+      var tx = new ethTx(rawTx);
+      tx.sign(privateKey);
+      var serializedTx = tx.serialize();
+      web3.eth.sendRawTransaction(serializedTx.toString('hex'), function(err, hash) {
+        if(err) console.error(err);
+        var txInterval = setInterval(function(){
+          var contract = web3.eth.getTransactionReceipt(hash);
+          if(contract!=null){
+            if(typeof(contract.contractAddress)=='undefined') return;
+            clearInterval(txInterval);
+            oraclizeC = contract.contractAddress;
+            addressNonce++;
+            if(fallbackContractMode){
+              var setCBaddressInputData = '0x'+ethAbi.simpleEncode("setCBaddress(address)",mainAccount).toString('hex');
+              var rawTx = {
+                nonce: web3.toHex(addressNonce),
+                gasPrice: web3.toHex(web3.eth.gasPrice),
+                gasLimit: web3.toHex(defaultGas),
+                to: oraclizeC,
+                value: '0x00',
+                data: setCBaddressInputData
+              };
+              var tx = new ethTx(rawTx);
+              tx.sign(privateKey);
+              var serializedTx = tx.serialize();
+              web3.eth.sendRawTransaction(serializedTx.toString('hex'));
+              addressNonce++;
+            }
+            OARgenerate();
+          }
+        }, 3000);
+      });
+    }
+  }
 }
 
-
 function OARgenerate(){
-  dataB = dataB['code'];
-  var contractOAR = web3.eth.contract(abi).new({from:from,data:dataB,gas:3000000}, function(e, contract){
-    if (typeof contract.address != 'undefined') {
-      oraclizeOAR = contract.address;
-      contract.setAddr(oraclizeC, {from:from,gas:3000000});
-      addr = contract.getAddress.call();
-      console.log('Generated OAR Address: '+oraclizeOAR);
-      console.log('Please add this line to your contract constructor:\n\n'+'OAR = OraclizeAddrResolverI('+oraclizeOAR+');\n\n');
-      setTimeout(function(){
-        runLog();
-      },100);
-    }
-  });
+  if(ops.address && !ops.broadcast){
+    var contractOAR = web3.eth.contract(abi).new({},{from:mainAccount,data:dataB,gas:defaultGas}, function(e, contract){
+      if (typeof contract.address != 'undefined') {
+        oraclizeOAR = contract.address;
+        contract.setAddr(oraclizeC, {from:mainAccount,gas:defaultGas});
+        console.log('Generated OAR Address: '+oraclizeOAR);
+        console.log('Please add this line to your contract constructor:\n\n'+'OAR = OraclizeAddrResolverI('+oraclizeOAR+');\n\n');
+        setTimeout(function(){
+          runLog();
+        },500);
+      }
+    });
+  } else if(ops.broadcast){
+    var rawTx = {
+      nonce: web3.toHex(addressNonce),
+      gasPrice: web3.toHex(web3.eth.gasPrice), 
+      gasLimit: web3.toHex(defaultGas),
+      value: '0x00', 
+      data: '0x'+dataB.replace('0x','')
+    };
+    var tx = new ethTx(rawTx);
+    tx.sign(privateKey);
+    var serializedTx = tx.serialize();
+    web3.eth.sendRawTransaction(serializedTx.toString('hex'), function(err, hash) {
+      if(err) console.error(err);
+      var txInterval = setInterval(function(){
+        var contractOAR = web3.eth.getTransactionReceipt(hash);
+        if(contractOAR!=null){
+          if(typeof(contractOAR.contractAddress)=='undefined') return;
+          clearInterval(txInterval);
+          addressNonce++;
+          oraclizeOAR = contractOAR.contractAddress;
+          contractOAR = web3.eth.contract(abi).at(oraclizeOAR);
+          var txInputData = '0xd1d80fdf000000000000000000000000'+oraclizeC.replace('0x',''); // setAddr(address)
+          var rawTx2 = {
+            to: oraclizeOAR,
+            nonce: web3.toHex(addressNonce),
+            gasPrice: web3.toHex(web3.eth.gasPrice),
+            gasLimit: web3.toHex(defaultGas),
+            value: '0x00',
+            data: txInputData
+          };
+          var tx2 = new ethTx(rawTx2);
+          tx2.sign(privateKey);
+          var serializedTx = tx2.serialize();
+          web3.eth.sendRawTransaction(serializedTx.toString('hex'), function(err, hash) {
+            if(err) console.error(err);
+            var txInterval = setInterval(function(){
+              if(web3.eth.getTransactionReceipt(hash)==null) return;
+              clearInterval(txInterval);
+              console.log('Generated OAR Address: '+oraclizeOAR);
+              console.log('Please add this line to your contract constructor:\n\n'+'OAR = OraclizeAddrResolverI('+oraclizeOAR+');\n\n');
+              addressNonce++;
+              setTimeout(function(){
+                runLog();
+              },500);
+            }, 3000);
+          });
+        }
+      }, 3000);
+    });
+  }
 }
 
 function createQuery(query, callback){
-  request.post('https://api.oraclize.it/api/v1/query/create', {body: query, json: true}, function (error, response, body) {
+  request.post('https://api.oraclize.it/v1/query/create', {body: query, json: true, headers: { 'User-Agent': 'ethereum-bridge nodejs' }}, function (error, response, body) {
     if (!error && response.statusCode == 200) {
       callback(body);
     }
@@ -190,7 +472,7 @@ function createQuery(query, callback){
 }
 
 function checkQueryStatus(query_id, callback){
-  request.get('https://api.oraclize.it/api/v1/query/'+query_id+'/status', {json: true}, function (error, response, body) {
+  request.get('https://api.oraclize.it/v1/query/'+query_id+'/status', {json: true, headers: { 'User-Agent': 'ethereum-bridge nodejs' }}, function (error, response, body) {
     if (!error && response.statusCode == 200) {
       callback(body);
     }
@@ -201,10 +483,13 @@ function checkQueryStatus(query_id, callback){
 function runLog(){
   if(typeof(contract)=="undefined"){
     oraclizeC = web3.eth.contract(abi).at(oraclizeOAR).getAddress.call();
+    if(oraclizeC=='0x'){
+      throw new Error("Oraclize Connector not found, make sure you entered the correct OAR");
+    }
     contract = web3.eth.contract(abiOraclize).at(oraclizeC);
   }
 
-  console.log('Listening @ '+oraclizeC);
+  console.log('Listening @ '+oraclizeC+' (Oraclize Connector)\n');
 
   var log1e = contract.Log1([], [], function(err, data){
       if (err == null){
@@ -220,15 +505,18 @@ function runLog(){
     });
 
   function handleLog(data){
+    var counter = 0;
     data = data['args'];
     var myIdInitial = data['cid'];
+    myIdList[myIdInitial] = false;
     var myid = myIdInitial;
     var cAddr = data['sender'];
     var ds = data['datasource'];
     if(typeof(data['arg']) != 'undefined'){
       var formula = data['arg'];
     } else {
-      var formula = [data['arg1'],JSON.parse(data['arg2'])];
+      var arg2formula = data['arg2'];
+      var formula = [data['arg1'],arg2formula];
     }
     var time = parseInt(data['timestamp']);
     var gasLimit = data['gaslimit'];
@@ -241,8 +529,10 @@ function runLog(){
     };
     console.log(formula);
 
-      console.log(JSON.stringify(query)); 
+      console.log(JSON.stringify(query));
+      if(!myIdList[myIdInitial] && counter>0 || myIdList[myIdInitial]) return;
       createQuery(query, function(data){
+        counter++;
         console.log("Query : "+JSON.stringify(data)); 
         myid = data.result.id;
         console.log("New query created, id: "+myid);
@@ -255,8 +545,11 @@ function runLog(){
             var query_result = last_check.results[last_check.results.length-1];
             var dataRes = query_result;
             var dataProof = data.result.checks[data.result.checks.length-1]['proofs'][0];
-            if (dataRes==null || (dataProof==null && proofType!='0x00')) return;
+            if (!last_check.success) return;
             else clearInterval(interval);
+            if(dataProof==null && proofType!='0x00'){
+              dataProof = new Buffer('None');
+            }
             queryComplete(gasLimit, myIdInitial, dataRes, dataProof, cAddr);
           });
                 
@@ -267,25 +560,66 @@ function runLog(){
 }
 
 function queryComplete(gasLimit, myid, result, proof, contractAddr){
+  if(myIdList[myid]) return;
   if(!listenOnlyMode){
     if(proof==null){
-      var callbackDefinition = [{"constant":false,"inputs":[{"name":"myid","type":"bytes32"},{"name":"result","type":"string"}],"name":"__callback","outputs":[],"type":"function"},{"inputs":[],"type":"constructor"}];
-      web3.eth.contract(callbackDefinition).at(contractAddr).__callback(myid,result,{from:from,gas:gasLimit,value:0}, function(e, contract){
-        if(e){
-          console.log(e);
-        }
-      });
+      if(ops.address && !ops.broadcast){
+        var callbackDefinition = [{"constant":false,"inputs":[{"name":"myid","type":"bytes32"},{"name":"result","type":"string"}],"name":"__callback","outputs":[],"type":"function"},{"inputs":[],"type":"constructor"}];
+        web3.eth.contract(callbackDefinition).at(contractAddr).__callback(myid,result,{from:mainAccount,gas:gasLimit,value:0}, function(e, contract){
+          if(e){
+            console.log(e);
+          }
+          myIdList[myid] = true;
+        });
+      } else {
+        var inputResult = ethAbi.rawEncode(["bytes32","string"],[myid,result]).toString('hex');
+        var rawTx = {
+          nonce: web3.toHex(addressNonce),
+          gasPrice: web3.toHex(web3.eth.gasPrice), 
+          gasLimit: web3.toHex(gasLimit),
+          to: contractAddr, 
+          value: '0x00', 
+          data: '0x27DC297E'+inputResult
+        };
+        var tx = new ethTx(rawTx);
+        tx.sign(privateKey);
+        var serializedTx = tx.serialize();
+        web3.eth.sendRawTransaction(serializedTx.toString('hex'));
+        myIdList[myid] = true;
+        addressNonce++;
+      }
     } else {
-      var callbackDefinition = [{"constant":false,"inputs":[{"name":"myid","type":"bytes32"},{"name":"result","type":"string"},{"name":"proof","type":"bytes"}],"name":"__callback","outputs":[],"type":"function"},{"inputs":[],"type":"constructor"}];
-      web3.eth.contract(callbackDefinition).at(contractAddr).__callback(myid,result,proof,{from:from,gas:gasLimit,value:0}, function(e, contract){
-        if(e){
-          console.log(e);
-        }
-      });
+      var inputProof = (proof.length==46) ? bs58.decode(proof) : proof;
+      if(ops.address && !ops.broadcast){
+        var callbackDefinition = [{"constant":false,"inputs":[{"name":"myid","type":"bytes32"},{"name":"result","type":"string"},{"name":"proof","type":"bytes"}],"name":"__callback","outputs":[],"type":"function"},{"inputs":[],"type":"constructor"}];
+        web3.eth.contract(callbackDefinition).at(contractAddr).__callback(myid,result,inputProof,{from:mainAccount,gas:gasLimit,value:0}, function(e, contract){
+          if(e){
+            console.log(e);
+          }
+          myIdList[myid] = true;
+        });
+      } else {
+        var inputResultWithProof = ethAbi.rawEncode(["bytes32","string","bytes"],[myid,result,inputProof]).toString('hex');
+        var rawTx = {
+          nonce: web3.toHex(addressNonce),
+          gasPrice: web3.toHex(web3.eth.gasPrice), 
+          gasLimit: web3.toHex(gasLimit),
+          to: contractAddr, 
+          value: '0x00', 
+          data: '0x38BBFA50'+inputResultWithProof
+        };
+        var tx = new ethTx(rawTx);
+        tx.sign(privateKey);
+        var serializedTx = tx.serialize();
+        web3.eth.sendRawTransaction(serializedTx.toString('hex'));
+        myIdList[myid] = true;
+        addressNonce++;
+      }
       console.log('proof: '+proof);
     }
   }
   console.log('myid: '+myid);
   console.log('result: '+result);
-  (!listenOnlyMode) ? console.log('Contract '+contractAddr+ ' __callback called'):console.log('Contract __callback not called (listen only mode)');
+  (!listenOnlyMode) ? console.log('Contract '+contractAddr+ ' __callback called') : console.log('Contract __callback not called (listen only mode)');
 }
+
