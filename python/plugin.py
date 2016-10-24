@@ -75,7 +75,7 @@ def jrpcReq(content,params=[]):
 	node = 'http://'+defaultnode
 	data = '{"jsonrpc":"2.0","method":"'+content+'","params":'+params+',"id":1}'
 	try:
-		r = requests.post(node, data=data)
+		r = requests.post(node, data=data, headers={"Content-Type":"application/json"})
 	except requests.exceptions.ConnectionError as e:
 		hostSplit = defaultnode.split(":")[0]
 		portSplit = defaultnode.split(":")[1]
@@ -241,14 +241,14 @@ def abiEncode(myid,resultName,proofName='none'):
 	return str(output).replace("\n",'')
 
 def createQuery(query, callback):
-	r = requests.post('https://api.oraclize.it/v1/query/create', data=json.dumps(query))
+	r = requests.post('https://api.oraclize.it/v1/query/create', data=json.dumps(query), headers={"Content-Type":"application/json","User-agent":"ethereum-bridge python"})
 	if(r.status_code!=200):
 		print 'Query error'
 		return
 	callback(json.loads(r.text))
 
 def checkQueryStatus(queryId, callback):
-	r = requests.get('https://api.oraclize.it/v1/query/'+queryId+'/status')
+	r = requests.get('https://api.oraclize.it/v1/query/'+queryId+'/status', headers={"Content-Type":"application/json","User-agent":"ethereum-bridge python"})
 	if(r.status_code!=200):
 		print 'Query error'
 		return
