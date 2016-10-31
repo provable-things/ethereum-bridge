@@ -15,7 +15,7 @@ Tip: setup a virtualenv for a cleaner installation
 pip install -r requirements.txt
 ```
 ```
-npm install -g ethereumjs-abi
+npm install ethereumjs-abi
 ```
 
 ###How to use

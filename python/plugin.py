@@ -136,7 +136,7 @@ def loadContracts():
 			fallbackContracts()
 	except(OSError, IOError) as e:
 		sys.exit('Contracts file not found,\nDid your run git clone --recursive ?')
-	except JsonRPCerror:
+	except Exception:
 		fallbackContracts()
 
 if(ops.gas):
