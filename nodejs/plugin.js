@@ -165,7 +165,6 @@ function loadContracts(){
       compileContracts();
     } else fallbackContracts();
   } catch (e){
-    console.log(e);
     fallbackContracts();
   }
 }
