@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-var Web3 = require('web3')
+var Web3 = require('web3');
 var stdio = require('stdio');
 var request = require('request');
 var fs = require('fs');
@@ -9,6 +9,7 @@ var ethUtil = require('ethereumjs-util');
 var ethAbi = require('ethereumjs-abi');
 var bs58 = require('bs58');
 var ethWallet = require('eth-lightwallet');
+var readline = require('readline');
 
 var oraclizeC = '',
     oraclizeOAR = '',
@@ -32,7 +33,7 @@ var ops = stdio.getopt({
     'address': {key: 'a', args: 1, description: 'unlocked address used to deploy Oraclize connector and OAR'},
     'broadcast': {description: 'broadcast only mode, a json key file with the private key is mandatory to sign all transactions'},
     'gas': {args: 1, description: 'change gas amount limit used to deploy contracts(in wei) (default: '+defaultGas+')'},
-    'key': {args: 1, description: 'JSON key file path (default: current folder keys.json)'},
+    'key': {args: 1, description: 'JSON key file path (default: ethreum-bridge/keys.json)'},
     'nocomp': {description: 'disable contracts compilation'},
     'forcecomp': {description: 'force contracts compilation'},
     'loadabi': {description: 'Load default abi interface (under ethereum-bridge/contracts/abi)'}
@@ -67,7 +68,10 @@ if(ops.url){
 }
 
 if(!ops.address && !ops.broadcast && ops.address!=-1){
-  //throw new Error('script started with no option, please choose between --address or --broadcast');
+  generateNewAddress();
+}
+
+function generateNewAddress(){
   generateAddress = true;
   console.log('no option choosen, generating a new address...\n');
     var password = ethWallet.keystore.generateRandomSeed();
@@ -252,7 +256,7 @@ if(ops.address && !ops.broadcast){
     }
   }
 } else if(ops.broadcast) {
-  console.log('Broadcast mode active, a json key file is needed with your private in this format: ["privateKeyHex"]');
+  console.log('Broadcast mode active, a json file is needed with private keys in this format: ["privateKeyHex"]');
   try {
     var keyPath = (ops.key) ? ops.key:'../keys.json';
     var privateKeyObj = JSON.parse(fs.readFileSync(keyPath).toString());
@@ -266,7 +270,9 @@ if(ops.address && !ops.broadcast){
     console.log('Loaded '+mainAccount+' - at position: '+accountIndex);
   } catch(e) {
       if(e.code==='ENOENT'){
-        throw new Error('private key not found in '+keyPath+' make sure this is the right path');
+        //throw new Error('private key not found in '+keyPath+' make sure this is the right path');
+        console.log("private key not found in "+keyPath);
+        generateNewAddress();
       } else throw new Error('Private key load error ',e);
   }
 }
@@ -328,11 +334,36 @@ function connectToWeb3(){
 
 function generateOraclize(){
   var balance = web3.eth.getBalance(mainAccount).toNumber();
-  if(balance<50000000000000000){
-    console.log("\n"+mainAccount+" doesn't have enough funds to cover transaction costs, please send at least 0.05 ETH");
+  if(balance<500000000000000000){
+    console.log("\n"+mainAccount+" doesn't have enough funds to cover transaction costs, please send at least 0.50 ETH");
+    if((web3.version.node).match(/TestRPC/)){
+      // eth node is TestRPC
+      var rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+      });
+      rl.question("Authorize Oraclize to move funds automatically from your node? [Y/n]: ",function(answ){
+        answ = answ.toLowerCase();
+        if(answ.match(/y/)){
+          var userAccount = '';
+          rl.question("Please choose the unlocked account index number in your node: ",function(answ){
+            if(answ>=0){
+              userAccount = web3.eth.accounts[answ];
+              if(typeof(userAccount)=="undefined") throw new Error("Account at index number: "+answ+" not found");
+              rl.question("send 0.50 ETH from account "+userAccount+" (index n.: "+answ+") to "+mainAccount+" ? [Y/n]: ",function(answ){
+                answ = answ.toLowerCase();
+                if(answ.match(/y/)){
+                  web3.eth.sendTransaction({"from":userAccount,"to":mainAccount,"value":500000000000000000});
+                } else console.log('No authorization given, waiting for funds...');
+              });
+            } else console.log('Negative account index not allowed');
+          });
+        } else console.log('No authorization given, waiting for funds...');
+      });
+    }
     function checkFunds(){
       balance = web3.eth.getBalance(mainAccount).toNumber();
-      if(balance<50000000000000000){
+      if(balance<500000000000000000){
         setTimeout(checkFunds,2500);
       } else {
         console.log('Deploying contracts, received '+(balance/1000000000000000000).toFixed(4)+' ETH');
@@ -464,17 +495,19 @@ function OARgenerate(){
 
 function createQuery(query, callback){
   request.post('https://api.oraclize.it/v1/query/create', {body: query, json: true, headers: { 'User-Agent': 'ethereum-bridge nodejs' }}, function (error, response, body) {
-    if (!error && response.statusCode == 200) {
+    if (error) console.error(error);
+    if (response.statusCode == 200) {
       callback(body);
-    }
+    } else console.error("UNEXPECTED ANSWER FROM THE ORACLIZE ENGINE, PLEASE UPGRADE TO THE LATEST ETHEREUM-BRIDGE");
   });
 }
 
 function checkQueryStatus(query_id, callback){
   request.get('https://api.oraclize.it/v1/query/'+query_id+'/status', {json: true, headers: { 'User-Agent': 'ethereum-bridge nodejs' }}, function (error, response, body) {
-    if (!error && response.statusCode == 200) {
+    if (error) console.error(error);
+    if (response.statusCode == 200) {
       callback(body);
-    }
+    } else console.error("UNEXPECTED ANSWER FROM THE ORACLIZE ENGINE, PLEASE UPGRADE TO THE LATEST ETHEREUM-BRIDGE");
   });
 }
 
@@ -486,6 +519,9 @@ function runLog(){
       throw new Error("Oraclize Connector not found, make sure you entered the correct OAR");
     }
     contract = web3.eth.contract(abiOraclize).at(oraclizeC);
+    if(contract.cbAddress()!=mainAccount){
+      throw new Error("The connector was deployed by another account,\n callback address of the deployed connector "+contract.cbAddress()+" doesn't match with your current account "+mainAccount);
+    }
   }
 
   console.log('Listening @ '+oraclizeC+' (Oraclize Connector)\n');
@@ -555,6 +591,8 @@ function runLog(){
         }, 5*1000);
       });
   }
+
+  console.log("(Ctrl+C to exit)\n");
 
 }
 
