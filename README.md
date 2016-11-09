@@ -1,7 +1,6 @@
 ## Description
 This tool enables any non-public blockchain instance to interact with the Oraclize service.
 
-_Please note that at this point this tool is still **experimental** and subject to change without notice._
+_Please note that at this point this python tool is still **experimental**, **outdated** and subject to change without notice._
 
-
-Choose your version nodejs or python and follow the relative README
+Up to date nodejs tool: https://github.com/oraclize/ethereum-bridge/tree/master/nodejs
