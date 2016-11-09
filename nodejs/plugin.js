@@ -11,6 +11,8 @@ var bs58 = require('bs58');
 var ethWallet = require('eth-lightwallet');
 var readline = require('readline');
 
+var BRIDGE_VERSION = require('./package.json').version;
+
 var oraclizeC = '',
     oraclizeOAR = '',
     contract,
@@ -494,7 +496,7 @@ function OARgenerate(){
 }
 
 function createQuery(query, callback){
-  request.post('https://api.oraclize.it/v1/query/create', {body: query, json: true, headers: { 'User-Agent': 'ethereum-bridge nodejs' }}, function (error, response, body) {
+  request.post('https://api.oraclize.it/v1/query/create', {body: query, json: true, headers: { 'X-User-Agent': 'ethereum-bridge/'+BRIDGE_VERSION+' (nodejs)' }}, function (error, response, body) {
     if (error) console.error(error);
     if (response.statusCode == 200) {
       callback(body);
@@ -503,7 +505,7 @@ function createQuery(query, callback){
 }
 
 function checkQueryStatus(query_id, callback){
-  request.get('https://api.oraclize.it/v1/query/'+query_id+'/status', {json: true, headers: { 'User-Agent': 'ethereum-bridge nodejs' }}, function (error, response, body) {
+  request.get('https://api.oraclize.it/v1/query/'+query_id+'/status', {json: true, headers: { 'X-User-Agent': 'ethereum-bridge/'+BRIDGE_VERSION+' (nodejs)' }}, function (error, response, body) {
     if (error) console.error(error);
     if (response.statusCode == 200) {
       callback(body);
@@ -659,4 +661,3 @@ function queryComplete(gasLimit, myid, result, proof, contractAddr){
   console.log('result: '+result);
   (!listenOnlyMode) ? console.log('Contract '+contractAddr+ ' __callback called') : console.log('Contract __callback not called (listen only mode)');
 }
-
