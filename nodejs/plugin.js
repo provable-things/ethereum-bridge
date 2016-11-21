@@ -10,7 +10,20 @@ var ethAbi = require('ethereumjs-abi');
 var bs58 = require('bs58');
 var ethWallet = require('eth-lightwallet');
 var readline = require('readline');
+var i18n = require('i18n');
 
+i18n.configure({
+  locales: ["ethereum"],
+  defaultLocale: 'ethereum',
+  updateFiles: false,
+  objectNotation: true,
+  directory: '../config/text'
+});
+
+var ENV_TYPE = i18n.__("ethereum");
+var ENV_ABBRV = i18n.__("eth");
+var ENV_BASE_UNIT = i18n.__("ETH");
+var BRIDGE_NAME = i18n.__("ethereum-bridge");
 var BRIDGE_VERSION = require('./package.json').version;
 
 var oraclizeC = '',
@@ -29,16 +42,16 @@ var oraclizeC = '',
 
 var ops = stdio.getopt({
     'oar': {key: 'o', args: 1, description: 'OAR Oraclize (address)'},
-    'url': {key: 'u', args: 1, description: 'eth node URL (default: http://'+defaultnode+')'},
-    'HOST': {key: 'H', args: 1, description: 'eth node IP:PORT (default: '+defaultnode+')'},
-    'port': {key: 'p', args: 1, description: 'eth node localhost port (default: 8545)'},
+    'url': {key: 'u', args: 1, description: ENV_ABBRV+' node URL (default: http://'+defaultnode+')'},
+    'HOST': {key: 'H', args: 1, description: ENV_ABBRV+' node IP:PORT (default: '+defaultnode+')'},
+    'port': {key: 'p', args: 1, description: ENV_ABBRV+' node localhost port (default: 8545)'},
     'address': {key: 'a', args: 1, description: 'unlocked address used to deploy Oraclize connector and OAR'},
     'broadcast': {description: 'broadcast only mode, a json key file with the private key is mandatory to sign all transactions'},
     'gas': {args: 1, description: 'change gas amount limit used to deploy contracts(in wei) (default: '+defaultGas+')'},
-    'key': {args: 1, description: 'JSON key file path (default: ethreum-bridge/keys.json)'},
+    'key': {args: 1, description: 'JSON key file path (default: '+BRIDGE_NAME+'/keys.json)'},
     'nocomp': {description: 'disable contracts compilation'},
     'forcecomp': {description: 'force contracts compilation'},
-    'loadabi': {description: 'Load default abi interface (under ethereum-bridge/contracts/abi)'}
+    'loadabi': {description: 'Load default abi interface (under '+ENV_TYPE+'-bridge/contracts/abi)'}
 });
 
 if(ops.gas){
@@ -322,24 +335,25 @@ if(listenOnlyMode && ops.oar && ops.loadabi && !generateAddress){
 }
 
 function connectToWeb3(){
-  console.log('eth node: '+defaultnode);
+  console.log(ENV_ABBRV+' node: '+defaultnode);
   console.log('Please wait...\n');
   web3.setProvider(new web3.providers.HttpProvider(defaultnode));
   if(!web3.isConnected()){
     var nodeSplit = defaultnode.substring(defaultnode.indexOf('://')+3).split(':');
     var portSplit = nodeSplit[1] || '8545';
     var hostSplit = nodeSplit[0] || 'localhost';
-    var gethString = '--rpc --rpccorsdomain="*" --rpcaddr="'+hostSplit+'" --rpcport="'+portSplit+'"';
-    throw new Error(defaultnode+' ethereum node not found, are you sure is it running?\n if you are using:\n * geth, append: '+gethString+'\n * ethereumjs-testrpc, try: testrpc -H '+hostSplit+':'+portSplit+'\n\ncheck also if your node or this machine is allowed to connect (firewall,port etc..)\n');
+    var startString =  i18n.__("connection_failed_tip");
+    startString = startString ? startString.replace(/@HOST/g,hostSplit).replace(/@PORT/g,portSplit).replace(/'/g,'"') : "";
+    throw new Error(defaultnode+' '+ENV_TYPE+' node not found, are you sure is it running?\n '+startString);
   }
 }
 
 function generateOraclize(){
   var balance = web3.eth.getBalance(mainAccount).toNumber();
   if(balance<500000000000000000){
-    console.log("\n"+mainAccount+" doesn't have enough funds to cover transaction costs, please send at least 0.50 ETH");
+    console.log("\n"+mainAccount+" doesn't have enough funds to cover transaction costs, please send at least 0.50 "+ENV_BASE_UNIT);
     if((web3.version.node).match(/TestRPC/)){
-      // eth node is TestRPC
+      // node is TestRPC
       var rl = readline.createInterface({
         input: process.stdin,
         output: process.stdout
@@ -352,7 +366,7 @@ function generateOraclize(){
             if(answ>=0){
               userAccount = web3.eth.accounts[answ];
               if(typeof(userAccount)=="undefined") throw new Error("Account at index number: "+answ+" not found");
-              rl.question("send 0.50 ETH from account "+userAccount+" (index n.: "+answ+") to "+mainAccount+" ? [Y/n]: ",function(answ){
+              rl.question("send 0.50 "+ENV_BASE_UNIT+" from account "+userAccount+" (index n.: "+answ+") to "+mainAccount+" ? [Y/n]: ",function(answ){
                 answ = answ.toLowerCase();
                 if(answ.match(/y/)){
                   web3.eth.sendTransaction({"from":userAccount,"to":mainAccount,"value":500000000000000000});
@@ -368,7 +382,7 @@ function generateOraclize(){
       if(balance<500000000000000000){
         setTimeout(checkFunds,2500);
       } else {
-        console.log('Deploying contracts, received '+(balance/1000000000000000000).toFixed(4)+' ETH');
+        console.log('Deploying contracts, received '+(balance/1000000000000000000).toFixed(4)+' '+ENV_BASE_UNIT);
         generateOraclize();
       }
     };
@@ -496,20 +510,20 @@ function OARgenerate(){
 }
 
 function createQuery(query, callback){
-  request.post('https://api.oraclize.it/v1/query/create', {body: query, json: true, headers: { 'X-User-Agent': 'ethereum-bridge/'+BRIDGE_VERSION+' (nodejs)' }}, function (error, response, body) {
+  request.post('https://api.oraclize.it/v1/query/create', {body: query, json: true, headers: { 'X-User-Agent': BRIDGE_NAME+'/'+BRIDGE_VERSION+' (nodejs)' }}, function (error, response, body) {
     if (error) console.error(error);
     if (response.statusCode == 200) {
       callback(body);
-    } else console.error("UNEXPECTED ANSWER FROM THE ORACLIZE ENGINE, PLEASE UPGRADE TO THE LATEST ETHEREUM-BRIDGE");
+    } else console.error("UNEXPECTED ANSWER FROM THE ORACLIZE ENGINE, PLEASE UPGRADE TO THE LATEST "+BRIDGE_NAME.toUpperCase());
   });
 }
 
 function checkQueryStatus(query_id, callback){
-  request.get('https://api.oraclize.it/v1/query/'+query_id+'/status', {json: true, headers: { 'X-User-Agent': 'ethereum-bridge/'+BRIDGE_VERSION+' (nodejs)' }}, function (error, response, body) {
+  request.get('https://api.oraclize.it/v1/query/'+query_id+'/status', {json: true, headers: { 'X-User-Agent': BRIDGE_NAME+'/'+BRIDGE_VERSION+' (nodejs)' }}, function (error, response, body) {
     if (error) console.error(error);
     if (response.statusCode == 200) {
       callback(body);
-    } else console.error("UNEXPECTED ANSWER FROM THE ORACLIZE ENGINE, PLEASE UPGRADE TO THE LATEST ETHEREUM-BRIDGE");
+    } else console.error("UNEXPECTED ANSWER FROM THE ORACLIZE ENGINE, PLEASE UPGRADE TO THE LATEST "+BRIDGE_NAME.toUpperCase());
   });
 }
 
