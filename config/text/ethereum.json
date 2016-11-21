@@ -1,7 +1,7 @@
 {
-	"eth": "eth",
-	"ethereum": "ethereum",
-	"ETH": "ETH",
-	"ethereum-bridge": "ethereum-bridge",
+	"blockchain_abbrv": "eth",
+	"blockchain_name": "ethereum",
+	"base_unit": "ETH",
+	"bridge_name": "ethereum-bridge",
 	"connection_failed_tip": "if you are using:\n * geth, append: --rpc --rpccorsdomain='*' --rpcaddr='@HOST' --rpcport='@PORT'\n * ethereumjs-testrpc, try: testrpc -H @HOST:@PORT\n\ncheck also if your node or this machine is allowed to connect (firewall,port etc..)\n"
 }
