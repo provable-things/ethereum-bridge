@@ -277,7 +277,7 @@ if(ops.address && !ops.broadcast){
     var accountIndex = (ops.address && ops.address>=0) ? ops.address : 0;
     privateKey = privateKeyObj[accountIndex].replace('0x','');
     privateKey = new Buffer(privateKey,'hex');
-    var publicKey = '0x'+ethUtil.privateToAddress(privateKey).toString('hex');
+    var publicKey = ethUtil.addHexPrefix(ethUtil.privateToAddress(privateKey).toString('hex'));
     mainAccount = publicKey;
     web3.eth.defaultAccount = mainAccount;
     addressNonce = web3.eth.getTransactionCount(mainAccount);
@@ -388,12 +388,12 @@ function generateOraclize(){
     checkFunds();
   } else {
     if(ops.address && !ops.broadcast){
-      contract = web3.eth.contract(abiOraclize).new({},{from:mainAccount,data:dataC,gas:defaultGas}, function(e, contract){
+      contract = web3.eth.contract(abiOraclize).new({},{from:mainAccount,data:ethUtil.addHexPrefix(dataC),gas:web3.toHex(defaultGas)}, function(e, contract){
         if(e) console.log(e);
         if (typeof contract.address != 'undefined') {
           oraclizeC = contract.address;
           if(fallbackContractMode){
-            web3.eth.contract(abiOraclize).at(oraclizeC).setCBaddress(mainAccount,{from:mainAccount,gas:defaultGas});
+            web3.eth.contract(abiOraclize).at(oraclizeC).setCBaddress(mainAccount,{from:mainAccount,gas:web3.toHex(defaultGas)});
           }
           OARgenerate();
         }
@@ -405,12 +405,12 @@ function generateOraclize(){
         gasPrice: web3.toHex(web3.eth.gasPrice),
         gasLimit: web3.toHex(defaultGas),
         value: '0x00',
-        data: '0x'+dataC.replace('0x','')
+        data: ethUtil.addHexPrefix(dataC)
       };
       var tx = new ethTx(rawTx);
       tx.sign(privateKey);
       var serializedTx = tx.serialize();
-      web3.eth.sendRawTransaction(serializedTx.toString('hex'), function(err, hash) {
+      web3.eth.sendRawTransaction(ethUtil.addHexPrefix(serializedTx.toString('hex')), function(err, hash) {
         if(err) console.error(err);
         var txInterval = setInterval(function(){
           var contract = web3.eth.getTransactionReceipt(hash);
@@ -420,19 +420,19 @@ function generateOraclize(){
             oraclizeC = contract.contractAddress;
             addressNonce++;
             if(fallbackContractMode){
-              var setCBaddressInputData = '0x'+ethAbi.simpleEncode("setCBaddress(address)",mainAccount).toString('hex');
+              var setCBaddressInputData = ethAbi.simpleEncode("setCBaddress(address)",mainAccount).toString('hex');
               var rawTx = {
                 nonce: web3.toHex(addressNonce),
                 gasPrice: web3.toHex(web3.eth.gasPrice),
                 gasLimit: web3.toHex(defaultGas),
                 to: oraclizeC,
                 value: '0x00',
-                data: setCBaddressInputData
+                data: ethUtil.addHexPrefix(setCBaddressInputData)
               };
               var tx = new ethTx(rawTx);
               tx.sign(privateKey);
               var serializedTx = tx.serialize();
-              web3.eth.sendRawTransaction(serializedTx.toString('hex'));
+              web3.eth.sendRawTransaction(ethUtil.addHexPrefix(serializedTx.toString('hex')));
               addressNonce++;
             }
             OARgenerate();
@@ -445,15 +445,15 @@ function generateOraclize(){
 
 function OARgenerate(){
   if(ops.address && !ops.broadcast){
-    var contractOAR = web3.eth.contract(abi).new({},{from:mainAccount,data:dataB,gas:defaultGas}, function(e, contract){
+    var contractOAR = web3.eth.contract(abi).new({},{from:mainAccount,data:ethUtil.addHexPrefix(dataB),gas:web3.toHex(defaultGas)}, function(e, contract){
       if (typeof contract.address != 'undefined') {
         oraclizeOAR = contract.address;
-        contract.setAddr(oraclizeC, {from:mainAccount,gas:defaultGas});
+        contract.setAddr(oraclizeC, {from:mainAccount,gas:web3.toHex(defaultGas)});
         console.log('Generated OAR Address: '+oraclizeOAR);
         console.log('Please add this line to your contract constructor:\n\n'+'OAR = OraclizeAddrResolverI('+oraclizeOAR+');\n\n');
         setTimeout(function(){
           runLog();
-        },500);
+        },3000);
       }
     });
   } else if(ops.broadcast){
@@ -467,7 +467,7 @@ function OARgenerate(){
     var tx = new ethTx(rawTx);
     tx.sign(privateKey);
     var serializedTx = tx.serialize();
-    web3.eth.sendRawTransaction(serializedTx.toString('hex'), function(err, hash) {
+    web3.eth.sendRawTransaction(ethUtil.addHexPrefix(serializedTx.toString('hex')), function(err, hash) {
       if(err) console.error(err);
       var txInterval = setInterval(function(){
         var contractOAR = web3.eth.getTransactionReceipt(hash);
@@ -489,7 +489,7 @@ function OARgenerate(){
           var tx2 = new ethTx(rawTx2);
           tx2.sign(privateKey);
           var serializedTx = tx2.serialize();
-          web3.eth.sendRawTransaction(serializedTx.toString('hex'), function(err, hash) {
+          web3.eth.sendRawTransaction(ethUtil.addHexPrefix(serializedTx.toString('hex')), function(err, hash) {
             if(err) console.error(err);
             var txInterval = setInterval(function(){
               if(web3.eth.getTransactionReceipt(hash)==null) return;
@@ -499,7 +499,7 @@ function OARgenerate(){
               addressNonce++;
               setTimeout(function(){
                 runLog();
-              },500);
+              },3000);
             }, 3000);
           });
         }
@@ -617,7 +617,7 @@ function queryComplete(gasLimit, myid, result, proof, contractAddr){
     if(proof==null){
       if(ops.address && !ops.broadcast){
         var callbackDefinition = [{"constant":false,"inputs":[{"name":"myid","type":"bytes32"},{"name":"result","type":"string"}],"name":"__callback","outputs":[],"type":"function"},{"inputs":[],"type":"constructor"}];
-        web3.eth.contract(callbackDefinition).at(contractAddr).__callback(myid,result,{from:mainAccount,gas:gasLimit,value:0}, function(e, contract){
+        web3.eth.contract(callbackDefinition).at(contractAddr).__callback(myid,result,{from:mainAccount,gas:web3.toHex(gasLimit),value:"0x0"}, function(e, contract){
           if(e){
             console.log(e);
           }
@@ -636,7 +636,7 @@ function queryComplete(gasLimit, myid, result, proof, contractAddr){
         var tx = new ethTx(rawTx);
         tx.sign(privateKey);
         var serializedTx = tx.serialize();
-        web3.eth.sendRawTransaction(serializedTx.toString('hex'));
+        web3.eth.sendRawTransaction(ethUtil.addHexPrefix(serializedTx.toString('hex')));
         myIdList[myid] = true;
         addressNonce++;
       }
@@ -644,7 +644,7 @@ function queryComplete(gasLimit, myid, result, proof, contractAddr){
       var inputProof = (proof.length==46) ? bs58.decode(proof) : proof;
       if(ops.address && !ops.broadcast){
         var callbackDefinition = [{"constant":false,"inputs":[{"name":"myid","type":"bytes32"},{"name":"result","type":"string"},{"name":"proof","type":"bytes"}],"name":"__callback","outputs":[],"type":"function"},{"inputs":[],"type":"constructor"}];
-        web3.eth.contract(callbackDefinition).at(contractAddr).__callback(myid,result,inputProof,{from:mainAccount,gas:gasLimit,value:0}, function(e, contract){
+        web3.eth.contract(callbackDefinition).at(contractAddr).__callback(myid,result,inputProof,{from:mainAccount,gas:web3.toHex(gasLimit),value:"0x0"}, function(e, contract){
           if(e){
             console.log(e);
           }
@@ -663,7 +663,7 @@ function queryComplete(gasLimit, myid, result, proof, contractAddr){
         var tx = new ethTx(rawTx);
         tx.sign(privateKey);
         var serializedTx = tx.serialize();
-        web3.eth.sendRawTransaction(serializedTx.toString('hex'));
+        web3.eth.sendRawTransaction(ethUtil.addHexPrefix(serializedTx.toString('hex')));
         myIdList[myid] = true;
         addressNonce++;
       }
