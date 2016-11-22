@@ -1,5 +1,4 @@
-nodejs/node_modules
-python/env
+node_modules
 keys.json
 *.log
 *.tmp

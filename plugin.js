@@ -16,7 +16,7 @@ i18n.configure({
   defaultLocale: 'ethereum',
   updateFiles: false,
   objectNotation: true,
-  directory: '../config/text'
+  directory: './config/text'
 });
 
 var BLOCKCHAIN_NAME = i18n.__("blockchain_name");
@@ -97,7 +97,7 @@ function generateNewAddress(){
         ks.generateNewAddress(pwDerivedKey, 1);
         var addr = ks.getAddresses()[0];
         mainAccount = '0x'+addr.replace('0x','');
-        var keyPath = (ops.key) ? ops.key : '../keys.json';
+        var keyPath = (ops.key) ? ops.key : './keys.json';
         fs.readFile(keyPath, function read(err,data) {
           keysFile = data;
           if(err){
@@ -193,12 +193,12 @@ function fallbackContracts(){
       console.log('Deploying contracts already pre-compiled (solc version not found/invalid)');
       fallbackContractMode = true;
     }
-    OCsource = fs.readFileSync(path.join(__dirname, '../contracts/binary/oraclizeConnector.binary')).toString();
-    abiOraclize = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../contracts/abi/oraclizeConnector.json')).toString());
+    OCsource = fs.readFileSync(path.join(__dirname, './contracts/binary/oraclizeConnector.binary')).toString();
+    abiOraclize = JSON.parse(fs.readFileSync(path.resolve(__dirname, './contracts/abi/oraclizeConnector.json')).toString());
     dataC = OCsource;
 
-    OARsource = fs.readFileSync(path.join(__dirname, '../contracts/binary/addressResolver.binary')).toString();
-    abi = JSON.parse(fs.readFileSync(path.join(__dirname, '../contracts/abi/addressResolver.json')).toString());
+    OARsource = fs.readFileSync(path.join(__dirname, './contracts/binary/addressResolver.binary')).toString();
+    abi = JSON.parse(fs.readFileSync(path.join(__dirname, './contracts/abi/addressResolver.json')).toString());
     dataB = OARsource;
   } catch(e) {
       if(e.code==='ENOENT'){
@@ -214,7 +214,7 @@ function fallbackContracts(){
 function compileContracts(){
   if(!fallbackContractMode){
     try {
-      OCsource = fs.readFileSync(path.join(__dirname, '../contracts/ethereum-api/connectors/oraclizeConnector.sol')).toString();
+      OCsource = fs.readFileSync(path.join(__dirname, './contracts/ethereum-api/connectors/oraclizeConnector.sol')).toString();
       var cbLine = OCsource.match(/\+?(cbAddress = 0x.*)\;/i)[0];
       OCsource = OCsource.replace(cbLine,'cbAddress = '+mainAccount+';');
       var compiledConnector = web3.eth.compile.solidity(OCsource);
@@ -223,15 +223,15 @@ function compileContracts(){
       var connectorObj = dataC;
       dataC = dataC['code'];
 
-      OARsource = fs.readFileSync(path.join(__dirname, '../contracts/ethereum-api/connectors/addressResolver.sol')).toString();
+      OARsource = fs.readFileSync(path.join(__dirname, './contracts/ethereum-api/connectors/addressResolver.sol')).toString();
       var compiledOAR = web3.eth.compile.solidity(OARsource);
       dataB = compiledOAR['OraclizeAddrResolver'] || compiledOAR;
       var oarObj = dataB;
       dataB = dataB['code'];
 
       if(ops.loadabi){
-        abiOraclize = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../contracts/abi/oraclizeConnector.json')).toString());
-        abi = JSON.parse(fs.readFileSync(path.join(__dirname, '../contracts/abi/addressResolver.json')).toString());
+        abiOraclize = JSON.parse(fs.readFileSync(path.resolve(__dirname, './contracts/abi/oraclizeConnector.json')).toString());
+        abi = JSON.parse(fs.readFileSync(path.join(__dirname, './contracts/abi/addressResolver.json')).toString());
       } else {
         abiOraclize = connectorObj['info']['abiDefinition'];
         abi = oarObj['info']['abiDefinition'];
@@ -272,7 +272,7 @@ if(ops.address && !ops.broadcast){
 } else if(ops.broadcast) {
   console.log('Broadcast mode active, a json file is needed with private keys in this format: ["privateKeyHex"]');
   try {
-    var keyPath = (ops.key) ? ops.key:'../keys.json';
+    var keyPath = (ops.key) ? ops.key:'./keys.json';
     var privateKeyObj = JSON.parse(fs.readFileSync(keyPath).toString());
     var accountIndex = (ops.address && ops.address>=0) ? ops.address : 0;
     privateKey = privateKeyObj[accountIndex].replace('0x','');
@@ -296,8 +296,8 @@ if(!generateAddress){
     compileContracts();
   } else {
     if(ops.oar && ops.loadabi){
-        abiOraclize = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../contracts/abi/oraclizeConnector.json')).toString());
-        abi = JSON.parse(fs.readFileSync(path.join(__dirname, '../contracts/abi/addressResolver.json')).toString());
+        abiOraclize = JSON.parse(fs.readFileSync(path.resolve(__dirname, './contracts/abi/oraclizeConnector.json')).toString());
+        abi = JSON.parse(fs.readFileSync(path.join(__dirname, './contracts/abi/addressResolver.json')).toString());
     } else {
       if(!listenOnlyMode && !ops.nocomp){
         loadContracts();
