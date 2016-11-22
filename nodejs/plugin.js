@@ -340,7 +340,8 @@ function connectToWeb3(){
   if(!web3.isConnected()){
     var nodeSplit = defaultnode.substring(defaultnode.indexOf('://')+3).split(':');
     var portSplit = nodeSplit[1] || '8545';
-    var hostSplit = nodeSplit[0] || 'localhost';
+    var hostSplit = nodeSplit[0] || '127.0.0.1';
+    if(hostSplit=='localhost') hostSplit = '127.0.0.1';
     var startString =  i18n.__("connection_failed_tip");
     startString = startString ? startString.replace(/@HOST/g,hostSplit).replace(/@PORT/g,portSplit).replace(/'/g,'"') : "";
     throw new Error(defaultnode+' '+BLOCKCHAIN_NAME+' node not found, are you sure is it running?\n '+startString);
