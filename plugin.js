@@ -569,8 +569,8 @@ function runLog(){
       var arg2formula = data['arg2'];
       var formula = [data['arg1'],arg2formula];
     }
-    var time = parseInt(data['timestamp']);
-    var gasLimit = data['gaslimit'];
+    var time = data['timestamp'].toNumber();
+    var gasLimit = data['gaslimit'].toNumber();
     var proofType = data['proofType'];
     var query = {
         when: time,
@@ -600,6 +600,10 @@ function runLog(){
             else clearInterval(interval);
             if(dataProof==null && proofType!='0x00'){
               dataProof = new Buffer('None');
+            } else if(typeof dataProof == 'object' && proofType!='0x00'){
+              if(typeof dataProof.type != 'undefined' && typeof dataProof.value != 'undefined'){
+                dataProof = new Buffer(dataProof.value);
+              }
             }
             queryComplete(gasLimit, myIdInitial, dataRes, dataProof, cAddr);
           });
