@@ -11,6 +11,54 @@ var bs58 = require('bs58');
 var ethWallet = require('eth-lightwallet');
 var readline = require('readline');
 var i18n = require('i18n');
+var loki = require('lokijs');
+var db = new loki('./config/db.json',{
+  autoload: true,
+  autoloadCallback: loadHandler,
+  autosave: true,
+  autosaveInterval: 2000
+});
+var queriesDb;
+var bridgeinfoDb;
+
+function loadHandler(){
+  // create a new collection if none was found
+  if(db.collections.length==0 || db.getCollection('queries')==null && db.getCollection('bridgeinfo')==null){
+    queriesDb = db.addCollection('queries');
+    bridgeinfoDb = db.addCollection('bridgeinfo');
+  } else {
+    queriesDb = db.getCollection('queries');
+    bridgeinfoDb = db.getCollection('bridgeinfo');
+  }
+  var storedVersion = bridgeinfoDb.get(1);
+  if(storedVersion==null){
+    bridgeinfoDb.insert({'name':BRIDGE_NAME,'version':BRIDGE_VERSION});
+  }
+  var pendingQueries = queriesDb.find({
+    '$or':[{
+      'active':true
+    },{
+      'callback_complete':false
+    }],
+    '$and':[{
+      'oar':oraclizeOAR
+    },{
+      'connector':oraclizeC
+    },{
+      'cbAddress':mainAccount
+    }]
+  });
+
+  for(var i=0;i<pendingQueries.length;i++){
+    queryDoc = pendingQueries[i];
+    var timeDiff = parseInt(queryDoc.target_timestamp-(Date.now()/1000));
+    var queryDelay = timeDiff<=0 ? 0 : timeDiff*1000;
+    console.log("Checking query status in "+parseInt(queryDelay/1000)+" seconds");
+    setTimeout(function() {
+      checkQueryStatus(queryDoc,queryDoc.myid,queryDoc.myIdInitial,queryDoc.contractAddress,queryDoc.proofType,queryDoc.gasLimit);
+    }, queryDelay);
+  }
+}
 
 i18n.configure({
   defaultLocale: 'ethereum',
@@ -560,6 +608,7 @@ function runLog(){
     data = data['args'];
     var myIdInitial = data['cid'];
     myIdList[myIdInitial] = false;
+    if(queriesDb.find({'myIdInitial':myIdInitial}).length!=0) return;
     var myid = myIdInitial;
     var cAddr = data['sender'];
     var ds = data['datasource'];
@@ -586,24 +635,29 @@ function runLog(){
       console.log("Query : "+JSON.stringify(data)); 
       myid = data.result.id;
       console.log("New query created, id: "+myid);
-      var queryCheckDelay = (time<=5 && time>=0) ? 0 : time-5;
       var unixTime = parseInt(Date.now()/1000);
-      if(time>unixTime){
-        queryCheckDelay = parseInt(time-unixTime);
-      }
-      console.log("Checking query status in "+queryCheckDelay+" seconds");
+      var queryCheckDelay = getQueryDelay(time,unixTime);
+      var queryDoc = queriesDb.insert({'active':true,'callback_complete':false,'target_timestamp':unixTime+(queryCheckDelay/1000),'oar':oraclizeOAR,'connector':oraclizeC,'cbAddress':mainAccount,'myid':myid,'myIdInitial':myIdInitial,'delay':time,'query':formula,'datasource':ds,'contractAddress':cAddr,'proofType':proofType,'gasLimit':gasLimit});
+      console.log("Checking query status in "+parseInt(queryCheckDelay/1000)+" seconds");
       setTimeout(function() {
         // check query status
-        checkQueryStatus(myid,myIdInitial,cAddr,proofType,gasLimit);
-      }, queryCheckDelay*1000);
+        checkQueryStatus(queryDoc,myid,myIdInitial,cAddr,proofType,gasLimit);
+      }, queryCheckDelay);
     });
   }
 
   console.log("(Ctrl+C to exit)\n");
-
 }
 
-function checkQueryStatus(myid,myIdInitial,contractAddress,proofType,gasLimit){
+function getQueryDelay(time,unixTime){
+  var queryCheckDelay = (time<=5 && time>=0) ? 0 : time;
+  if(time>unixTime){
+    queryCheckDelay = parseInt(time-unixTime);
+  }
+  return queryCheckDelay*1000;
+}
+
+function checkQueryStatus(queryDoc,myid,myIdInitial,contractAddress,proofType,gasLimit){
   console.log("Checking query status every 5 seconds..");
   var interval = setInterval(function(){
     queryStatus(myid, function(data){ console.log("Query result: "+JSON.stringify(data));  
@@ -621,13 +675,15 @@ function checkQueryStatus(myid,myIdInitial,contractAddress,proofType,gasLimit){
           dataProof = new Buffer(dataProof.value);
         }
       }
-      queryComplete(gasLimit, myIdInitial, dataRes, dataProof, contractAddress);
+      queryDoc.active = false;
+      queriesDb.update(queryDoc);
+      queryComplete(queryDoc, gasLimit, myIdInitial, dataRes, dataProof, contractAddress);
     });
   }, 5*1000);
 }
 
-function queryComplete(gasLimit, myid, result, proof, contractAddr){
-  if(myIdList[myid]) return;
+function queryComplete(queryDoc, gasLimit, myid, result, proof, contractAddr){
+  if(myIdList[myid] || queriesDb.find({'myIdInitial':myid}).callback_complete==true) return;
   if(!listenOnlyMode){
     if(proof==null){
       if(ops.address && !ops.broadcast){
@@ -685,6 +741,8 @@ function queryComplete(gasLimit, myid, result, proof, contractAddr){
       console.log('proof: '+proof);
     }
   }
+  queryDoc.callback_complete = true;
+  queriesDb.update(queryDoc);
   console.log('myid: '+myid);
   console.log('result: '+result);
   (!listenOnlyMode) ? console.log('Contract '+contractAddr+ ' __callback called') : console.log('Contract __callback not called (listen only mode)');

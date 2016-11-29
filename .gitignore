@@ -2,3 +2,4 @@ node_modules
 keys.json
 *.log
 *.tmp
+config/db.json
