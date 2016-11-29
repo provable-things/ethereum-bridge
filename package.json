@@ -6,6 +6,7 @@
   "dependencies": {
     "asn1": "^0.2.3",
     "bs58": "^3.0.0",
+    "compare-versions": "^3.0.0",
     "eth-lightwallet": "^2.5.2",
     "ethereumjs-abi": "^0.6.4",
     "ethereumjs-tx": "^1.1.2",

@@ -12,6 +12,7 @@ var ethWallet = require('eth-lightwallet');
 var readline = require('readline');
 var i18n = require('i18n');
 var loki = require('lokijs');
+var versionCompare = require('compare-versions');
 var db = new loki('./config/db.json',{
   autoload: true,
   autoloadCallback: loadHandler,
@@ -34,6 +35,21 @@ function loadHandler(){
   if(storedVersion==null){
     bridgeinfoDb.insert({'name':BRIDGE_NAME,'version':BRIDGE_VERSION});
   }
+
+  try {
+    request.get('https://api.oraclize.it/v1/platform/info', {json: true, headers: { 'X-User-Agent': BRIDGE_NAME+'/'+BRIDGE_VERSION+' (nodejs)' }}, function (error, response, body) {
+      if (error) console.error(error);
+      if (response.statusCode == 200) {
+        var latestVersion = body.result.distributions[BRIDGE_NAME].latest.version;
+        if(versionCompare(BRIDGE_VERSION,latestVersion)==-1){
+          console.error("YOU ARE NOT RUNNING THE LATEST "+BRIDGE_NAME.toUpperCase()+" VERSION, PLEASE UPGRADE TO "+latestVersion+" https://github.com/oraclize/"+BRIDGE_NAME);
+        }
+      } else console.error("UNEXPECTED ANSWER FROM THE ORACLIZE ENGINE, PLEASE UPGRADE TO THE LATEST "+BRIDGE_NAME.toUpperCase());
+    });
+  } catch(e){
+    console.error("ERROR, CANNOT FETCH THE LATEST VERSION, PLEASE MAKE SURE YOU ARE RUNNING THE LATEST VERSION");
+  }
+
   var pendingQueries = queriesDb.find({
     '$or':[{
       'active':true
@@ -184,32 +200,6 @@ var OCsource,
     OARsource,
     dataB,
     abi;
-
-/**
- * @function
- * @param {String} left  Version #1
- * @param {String} right Version #2
- * @return {Integer|Boolean}
- * @author Alexey Bass (albass)
- * @since 2011-07-14
- */
-versionCompare = function(left, right) {
-    if (typeof left + typeof right != 'stringstring')
-        return false;
-    
-    var a = left.split('.')
-    ,   b = right.split('.')
-    ,   i = 0, len = Math.max(a.length, b.length);
-        
-    for (; i < len; i++) {
-        if ((a[i] && !b[i] && parseInt(a[i]) > 0) || (parseInt(a[i]) > parseInt(b[i]))) {
-            return 1;
-        } else if ((b[i] && !a[i] && parseInt(b[i]) > 0) || (parseInt(a[i]) < parseInt(b[i]))) {
-            return -1;
-        }
-    }
-    return 0;
-}
 
 function loadContracts(){
   try {
