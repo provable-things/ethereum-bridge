@@ -42,13 +42,11 @@ function loadHandler(){
       if (response.statusCode == 200) {
         var latestVersion = body.result.distributions[BRIDGE_NAME].latest.version;
         if(versionCompare(BRIDGE_VERSION,latestVersion)==-1){
-          console.error("YOU ARE NOT RUNNING THE LATEST "+BRIDGE_NAME.toUpperCase()+" VERSION, PLEASE UPGRADE TO "+latestVersion+" https://github.com/oraclize/"+BRIDGE_NAME);
+          console.error("\n************************************************************************\nA NEW VERSION OF THIS TOOL HAS BEEN DETECTED\nIT IS HIGHLY RECOMMENDED THAT YOU ALWAYS RUN THE LATEST VERSION, PLEASE UPGRADE TO "+BRIDGE_NAME.toUpperCase()+" "+latestVersion+"\n************************************************************************\n");
         }
-      } else console.error("UNEXPECTED ANSWER FROM THE ORACLIZE ENGINE, PLEASE UPGRADE TO THE LATEST "+BRIDGE_NAME.toUpperCase());
+      }
     });
-  } catch(e){
-    console.error("ERROR, CANNOT FETCH THE LATEST VERSION, PLEASE MAKE SURE YOU ARE RUNNING THE LATEST VERSION");
-  }
+  } catch(e){}
 
   var pendingQueries = queriesDb.find({
     '$or':[{
