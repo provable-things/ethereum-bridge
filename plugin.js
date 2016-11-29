@@ -518,7 +518,7 @@ function createQuery(query, callback){
   });
 }
 
-function checkQueryStatus(query_id, callback){
+function queryStatus(query_id, callback){
   request.get('https://api.oraclize.it/v1/query/'+query_id+'/status', {json: true, headers: { 'X-User-Agent': BRIDGE_NAME+'/'+BRIDGE_VERSION+' (nodejs)' }}, function (error, response, body) {
     if (error) console.error(error);
     if (response.statusCode == 200) {
@@ -571,7 +571,7 @@ function runLog(){
     }
     var time = data['timestamp'].toNumber();
     var gasLimit = data['gaslimit'].toNumber();
-    var proofType = data['proofType'];
+    var proofType = ethUtil.addHexPrefix(data['proofType']);
     var query = {
         when: time,
         datasource: ds,
@@ -579,41 +579,51 @@ function runLog(){
         proof_type: parseInt(proofType)
     };
     console.log(formula);
-
-      console.log(JSON.stringify(query));
-      if(!myIdList[myIdInitial] && counter>0 || myIdList[myIdInitial]) return;
-      createQuery(query, function(data){
-        counter++;
-        console.log("Query : "+JSON.stringify(data)); 
-        myid = data.result.id;
-        console.log("New query created, id: "+myid);
-        console.log("Checking query status every 5 seconds..");
-        var interval = setInterval(function(){
-          // check query status
-          checkQueryStatus(myid, function(data){ console.log("Query result: "+JSON.stringify(data));  
-            if(data.result.checks==null) return; 
-            var last_check = data.result.checks[data.result.checks.length-1];
-            var query_result = last_check.results[last_check.results.length-1];
-            var dataRes = query_result;
-            var dataProof = data.result.checks[data.result.checks.length-1]['proofs'][0];
-            if (!last_check.success) return;
-            else clearInterval(interval);
-            if(dataProof==null && proofType!='0x00'){
-              dataProof = new Buffer('None');
-            } else if(typeof dataProof == 'object' && proofType!='0x00'){
-              if(typeof dataProof.type != 'undefined' && typeof dataProof.value != 'undefined'){
-                dataProof = new Buffer(dataProof.value);
-              }
-            }
-            queryComplete(gasLimit, myIdInitial, dataRes, dataProof, cAddr);
-          });
-                
-        }, 5*1000);
-      });
+    console.log(JSON.stringify(query));
+    if(!myIdList[myIdInitial] && counter>0 || myIdList[myIdInitial]) return;
+    createQuery(query, function(data){
+      counter++;
+      console.log("Query : "+JSON.stringify(data)); 
+      myid = data.result.id;
+      console.log("New query created, id: "+myid);
+      var queryCheckDelay = (time<=5 && time>=0) ? 0 : time-5;
+      var unixTime = parseInt(Date.now()/1000);
+      if(time>unixTime){
+        queryCheckDelay = parseInt(time-unixTime);
+      }
+      console.log("Checking query status in "+queryCheckDelay+" seconds");
+      setTimeout(function() {
+        // check query status
+        checkQueryStatus(myid,myIdInitial,cAddr,proofType,gasLimit);
+      }, queryCheckDelay*1000);
+    });
   }
 
   console.log("(Ctrl+C to exit)\n");
 
+}
+
+function checkQueryStatus(myid,myIdInitial,contractAddress,proofType,gasLimit){
+  console.log("Checking query status every 5 seconds..");
+  var interval = setInterval(function(){
+    queryStatus(myid, function(data){ console.log("Query result: "+JSON.stringify(data));  
+      if(data.result.checks==null) return; 
+      var last_check = data.result.checks[data.result.checks.length-1];
+      var query_result = last_check.results[last_check.results.length-1];
+      var dataRes = query_result;
+      var dataProof = data.result.checks[data.result.checks.length-1]['proofs'][0];
+      if (!last_check.success) return;
+      else clearInterval(interval);
+      if(dataProof==null && proofType!='0x00'){
+        dataProof = new Buffer('None');
+      } else if(typeof dataProof == 'object' && proofType!='0x00'){
+        if(typeof dataProof.type != 'undefined' && typeof dataProof.value != 'undefined'){
+          dataProof = new Buffer(dataProof.value);
+        }
+      }
+      queryComplete(gasLimit, myIdInitial, dataRes, dataProof, contractAddress);
+    });
+  }, 5*1000);
 }
 
 function queryComplete(gasLimit, myid, result, proof, contractAddr){
