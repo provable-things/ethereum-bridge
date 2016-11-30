@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+checkVersion();
 var Web3 = require('web3');
 var stdio = require('stdio');
 var request = require('request');
@@ -13,66 +14,9 @@ var readline = require('readline');
 var i18n = require('i18n');
 var loki = require('lokijs');
 var versionCompare = require('compare-versions');
-var db = new loki('./config/db.json',{
-  autoload: true,
-  autoloadCallback: loadHandler,
-  autosave: true,
-  autosaveInterval: 2000
-});
+var db;
 var queriesDb;
 var bridgeinfoDb;
-
-function loadHandler(){
-  // create a new collection if none was found
-  if(db.collections.length==0 || db.getCollection('queries')==null && db.getCollection('bridgeinfo')==null){
-    queriesDb = db.addCollection('queries');
-    bridgeinfoDb = db.addCollection('bridgeinfo');
-  } else {
-    queriesDb = db.getCollection('queries');
-    bridgeinfoDb = db.getCollection('bridgeinfo');
-  }
-  var storedVersion = bridgeinfoDb.get(1);
-  if(storedVersion==null){
-    bridgeinfoDb.insert({'name':BRIDGE_NAME,'version':BRIDGE_VERSION});
-  }
-
-  try {
-    request.get('https://api.oraclize.it/v1/platform/info', {json: true, headers: { 'X-User-Agent': BRIDGE_NAME+'/'+BRIDGE_VERSION+' (nodejs)' }}, function (error, response, body) {
-      if (error) console.error(error);
-      if (response.statusCode == 200) {
-        var latestVersion = body.result.distributions[BRIDGE_NAME].latest.version;
-        if(versionCompare(BRIDGE_VERSION,latestVersion)==-1){
-          console.error("\n************************************************************************\nA NEW VERSION OF THIS TOOL HAS BEEN DETECTED\nIT IS HIGHLY RECOMMENDED THAT YOU ALWAYS RUN THE LATEST VERSION, PLEASE UPGRADE TO "+BRIDGE_NAME.toUpperCase()+" "+latestVersion+"\n************************************************************************\n");
-        }
-      }
-    });
-  } catch(e){}
-
-  var pendingQueries = queriesDb.find({
-    '$or':[{
-      'active':true
-    },{
-      'callback_complete':false
-    }],
-    '$and':[{
-      'oar':oraclizeOAR
-    },{
-      'connector':oraclizeC
-    },{
-      'cbAddress':mainAccount
-    }]
-  });
-
-  for(var i=0;i<pendingQueries.length;i++){
-    queryDoc = pendingQueries[i];
-    var timeDiff = parseInt(queryDoc.target_timestamp-(Date.now()/1000));
-    var queryDelay = timeDiff<=0 ? 0 : timeDiff*1000;
-    console.log("Checking query status in "+parseInt(queryDelay/1000)+" seconds");
-    setTimeout(function() {
-      checkQueryStatus(queryDoc,queryDoc.myid,queryDoc.myIdInitial,queryDoc.contractAddress,queryDoc.proofType,queryDoc.gasLimit);
-    }, queryDelay);
-  }
-}
 
 i18n.configure({
   defaultLocale: 'ethereum',
@@ -99,7 +43,9 @@ var oraclizeC = '',
     fallbackContractMode = false,
     generateAddress = false,
     mainAccount,
-    defaultGas = 3000000;
+    defaultGas = 3000000,
+    resumeQueries = false,
+    skipQueries = false;
 
 var ops = stdio.getopt({
     'oar': {key: 'o', args: 1, description: 'OAR Oraclize (address)'},
@@ -112,7 +58,9 @@ var ops = stdio.getopt({
     'key': {args: 1, description: 'JSON key file path (default: '+BRIDGE_NAME+'/keys.json)'},
     'nocomp': {description: 'disable contracts compilation'},
     'forcecomp': {description: 'force contracts compilation'},
-    'loadabi': {description: 'Load default abi interface (under '+BRIDGE_NAME+'/contracts/abi)'}
+    'loadabi': {description: 'Load default abi interface (under '+BRIDGE_NAME+'/contracts/abi)'},
+    'resume': {description: 'resume all skipped queries (note: retries will not be counted/updated)'},
+    'skip': {description: 'skip all pending queries (note: retries will not be counted/updated)'}
 });
 
 if(ops.gas){
@@ -147,9 +95,30 @@ if(!ops.address && !ops.broadcast && ops.address!=-1){
   generateNewAddress();
 }
 
+if(ops.resume){
+  resumeQueries = true;
+}
+
+if(ops.skip){
+  skipQueries = true;
+}
+
+function checkVersion(){
+  var prVersion = process.version;
+  if(prVersion.substr(1,1) == '0' || prVersion.substr(1,1)<5){
+    console.error('Not compatible with '+prVersion+' of nodejs, please use at least v5.0.0');
+    console.log('exiting...');
+    process.exit(1);
+  } else if(prVersion.substr(1,1)>7){
+    console.error('Not compatible with '+prVersion+' of nodejs, please use v6.9.1 or a lower version');
+    console.log('exiting...');
+    process.exit(1);
+  }
+}
+
 function generateNewAddress(){
   generateAddress = true;
-  console.log('no option choosen, generating a new address...\n');
+  console.log('no option chosen, generating a new address...\n');
     var password = ethWallet.keystore.generateRandomSeed();
     ethWallet.keystore.createVault({
       password: password,
@@ -576,20 +545,20 @@ function runLog(){
     }
   }
 
+  // Log1 event
+  contract.Log1([], [], function(err, data){
+    if (err == null){
+      handleLog(data);
+    }
+  });
+  // Log2 event
+  contract.Log2([], [], function(err, data){
+    if (err == null){
+      handleLog(data);
+    }
+  });
+
   console.log('Listening @ '+oraclizeC+' (Oraclize Connector)\n');
-
-  var log1e = contract.Log1([], [], function(err, data){
-      if (err == null){
-        handleLog(data);
-      }
-      });
-    
-
-  var log2e = contract.Log2([], [], function(err, data){
-      if (err == null){
-        handleLog(data);
-      }
-    });
 
   function handleLog(data){
     var counter = 0;
@@ -625,7 +594,7 @@ function runLog(){
       console.log("New query created, id: "+myid);
       var unixTime = parseInt(Date.now()/1000);
       var queryCheckDelay = getQueryDelay(time,unixTime);
-      var queryDoc = queriesDb.insert({'active':true,'callback_complete':false,'target_timestamp':unixTime+(queryCheckDelay/1000),'oar':oraclizeOAR,'connector':oraclizeC,'cbAddress':mainAccount,'myid':myid,'myIdInitial':myIdInitial,'delay':time,'query':formula,'datasource':ds,'contractAddress':cAddr,'proofType':proofType,'gasLimit':gasLimit});
+      var queryDoc = queriesDb.insert({'active':true,'callback_complete':false,'retry_number':0,'target_timestamp':unixTime+(queryCheckDelay/1000),'oar':oraclizeOAR,'connector':oraclizeC,'cbAddress':mainAccount,'myid':myid,'myIdInitial':myIdInitial,'delay':time,'query':formula,'datasource':ds,'contractAddress':cAddr,'proofType':proofType,'gasLimit':gasLimit});
       console.log("Checking query status in "+parseInt(queryCheckDelay/1000)+" seconds");
       setTimeout(function() {
         // check query status
@@ -635,6 +604,82 @@ function runLog(){
   }
 
   console.log("(Ctrl+C to exit)\n");
+
+  db = new loki('./config/db.json',{
+    autoload: true,
+    autoloadCallback: loadHandler,
+    autosave: true,
+    autosaveInterval: 2000
+  });
+}
+
+function loadHandler(){
+  try {
+    request.get('https://api.oraclize.it/v1/platform/info', {json: true, headers: { 'X-User-Agent': BRIDGE_NAME+'/'+BRIDGE_VERSION+' (nodejs)' }}, function (error, response, body) {
+      if (error) console.error(error);
+      if (response.statusCode == 200) {
+        var latestVersion = body.result.distributions[BRIDGE_NAME].latest.version;
+        if(versionCompare(BRIDGE_VERSION,latestVersion)==-1){
+          console.error("\n************************************************************************\nA NEW VERSION OF THIS TOOL HAS BEEN DETECTED\nIT IS HIGHLY RECOMMENDED THAT YOU ALWAYS RUN THE LATEST VERSION, PLEASE UPGRADE TO "+BRIDGE_NAME.toUpperCase()+" "+latestVersion+"\n************************************************************************\n");
+        }
+      }
+    });
+  } catch(e){}
+
+  // create a new collection if none was found
+  if(db.collections.length==0 || db.getCollection('queries')==null && db.getCollection('bridgeinfo')==null){
+    queriesDb = db.addCollection('queries');
+    bridgeinfoDb = db.addCollection('bridgeinfo');
+  } else {
+    queriesDb = db.getCollection('queries');
+    bridgeinfoDb = db.getCollection('bridgeinfo');
+  }
+  var storedVersion = bridgeinfoDb.get(1);
+  if(storedVersion==null){
+    bridgeinfoDb.insert({'name':BRIDGE_NAME,'version':BRIDGE_VERSION});
+  }
+
+  var pendingQueries = queriesDb.find({
+    '$and':[{
+      'oar':oraclizeOAR
+    },{
+      'connector':oraclizeC
+    },{
+      'cbAddress':mainAccount
+    },{
+    '$or':[{
+      'active':true
+    },{
+      'callback_complete':false
+    }]}]
+  });
+
+  if(pendingQueries.length>0) console.log("Found "+pendingQueries.length+" pending queries");
+  else return;
+
+  if(skipQueries) {
+    console.log("Skipping all pending queries");
+    return;
+  }
+
+  for(var i=0;i<pendingQueries.length;i++){
+    var queryDoc = pendingQueries[i];
+    var timeDiff = parseInt(queryDoc.target_timestamp-(Date.now()/1000));
+    var queryDelay = timeDiff<=0 ? 0 : timeDiff*1000;
+    if(!resumeQueries){
+      if(queryDoc.retry_number<=3){
+        queryDoc.retry_number += 1;
+        queriesDb.update(queryDoc);
+      } else {
+        console.log("Skipping "+queryDoc.myid+" query, exceeded 3 retries");
+        continue;
+      }
+    }
+    console.log("Checking query status in "+parseInt(queryDelay/1000)+" seconds");
+    setTimeout(function() {
+      checkQueryStatus(queryDoc,queryDoc.myid,queryDoc.myIdInitial,queryDoc.contractAddress,queryDoc.proofType,queryDoc.gasLimit);
+    }, queryDelay);
+  }
 }
 
 function getQueryDelay(time,unixTime){
@@ -657,7 +702,7 @@ function checkQueryStatus(queryDoc,myid,myIdInitial,contractAddress,proofType,ga
       if (!last_check.success) return;
       else clearInterval(interval);
       if(dataProof==null && proofType!='0x00'){
-        dataProof = new Buffer('None');
+        dataProof = new Buffer('');
       } else if(typeof dataProof == 'object' && proofType!='0x00'){
         if(typeof dataProof.type != 'undefined' && typeof dataProof.value != 'undefined'){
           dataProof = new Buffer(dataProof.value);
@@ -671,67 +716,68 @@ function checkQueryStatus(queryDoc,myid,myIdInitial,contractAddress,proofType,ga
 }
 
 function queryComplete(queryDoc, gasLimit, myid, result, proof, contractAddr){
-  if(myIdList[myid] || queriesDb.find({'myIdInitial':myid}).callback_complete==true) return;
+  if(myIdList[myid] || queryDoc.callback_complete==true) return;
   if(!listenOnlyMode){
-    if(proof==null){
-      if(ops.address && !ops.broadcast){
-        var callbackDefinition = [{"constant":false,"inputs":[{"name":"myid","type":"bytes32"},{"name":"result","type":"string"}],"name":"__callback","outputs":[],"type":"function"},{"inputs":[],"type":"constructor"}];
-        web3.eth.contract(callbackDefinition).at(contractAddr).__callback(myid,result,{from:mainAccount,gas:web3.toHex(gasLimit),value:"0x0"}, function(e, contract){
-          if(e){
-            console.log(e);
-          }
+    try {
+      if(result==null) result = '';
+      if(proof==null){
+        if(ops.address && !ops.broadcast){
+          var callbackDefinition = [{"constant":false,"inputs":[{"name":"myid","type":"bytes32"},{"name":"result","type":"string"}],"name":"__callback","outputs":[],"type":"function"},{"inputs":[],"type":"constructor"}];
+          web3.eth.contract(callbackDefinition).at(contractAddr).__callback(myid,result,{from:mainAccount,gas:web3.toHex(gasLimit),value:"0x0"}, function(e, contract){
+            if(e) throw new Error(e);
+            myIdList[myid] = true;
+          });
+        } else {
+          var inputResult = ethAbi.rawEncode(["bytes32","string"],[myid,result]).toString('hex');
+          var rawTx = {
+            nonce: web3.toHex(addressNonce),
+            gasPrice: web3.toHex(web3.eth.gasPrice), 
+            gasLimit: web3.toHex(gasLimit),
+            to: contractAddr, 
+            value: '0x00', 
+            data: '0x27DC297E'+inputResult
+          };
+          var tx = new ethTx(rawTx);
+          tx.sign(privateKey);
+          var serializedTx = tx.serialize();
+          web3.eth.sendRawTransaction(ethUtil.addHexPrefix(serializedTx.toString('hex')));
           myIdList[myid] = true;
-        });
+          addressNonce++;
+        }
       } else {
-        var inputResult = ethAbi.rawEncode(["bytes32","string"],[myid,result]).toString('hex');
-        var rawTx = {
-          nonce: web3.toHex(addressNonce),
-          gasPrice: web3.toHex(web3.eth.gasPrice), 
-          gasLimit: web3.toHex(gasLimit),
-          to: contractAddr, 
-          value: '0x00', 
-          data: '0x27DC297E'+inputResult
-        };
-        var tx = new ethTx(rawTx);
-        tx.sign(privateKey);
-        var serializedTx = tx.serialize();
-        web3.eth.sendRawTransaction(ethUtil.addHexPrefix(serializedTx.toString('hex')));
-        myIdList[myid] = true;
-        addressNonce++;
-      }
-    } else {
-      var inputProof = (proof.length==46) ? bs58.decode(proof) : proof;
-      if(ops.address && !ops.broadcast){
-        var callbackDefinition = [{"constant":false,"inputs":[{"name":"myid","type":"bytes32"},{"name":"result","type":"string"},{"name":"proof","type":"bytes"}],"name":"__callback","outputs":[],"type":"function"},{"inputs":[],"type":"constructor"}];
-        web3.eth.contract(callbackDefinition).at(contractAddr).__callback(myid,result,inputProof,{from:mainAccount,gas:web3.toHex(gasLimit),value:"0x0"}, function(e, contract){
-          if(e){
-            console.log(e);
-          }
+        var inputProof = (proof.length==46) ? bs58.decode(proof) : proof;
+        if(ops.address && !ops.broadcast){
+          var callbackDefinition = [{"constant":false,"inputs":[{"name":"myid","type":"bytes32"},{"name":"result","type":"string"},{"name":"proof","type":"bytes"}],"name":"__callback","outputs":[],"type":"function"},{"inputs":[],"type":"constructor"}];
+          web3.eth.contract(callbackDefinition).at(contractAddr).__callback(myid,result,inputProof,{from:mainAccount,gas:web3.toHex(gasLimit),value:"0x0"}, function(e, contract){
+            if(e) throw new Error(e);
+            myIdList[myid] = true;
+          });
+        } else {
+          var inputResultWithProof = ethAbi.rawEncode(["bytes32","string","bytes"],[myid,result,inputProof]).toString('hex');
+          var rawTx = {
+            nonce: web3.toHex(addressNonce),
+            gasPrice: web3.toHex(web3.eth.gasPrice), 
+            gasLimit: web3.toHex(gasLimit),
+            to: contractAddr, 
+            value: '0x00', 
+            data: '0x38BBFA50'+inputResultWithProof
+          };
+          var tx = new ethTx(rawTx);
+          tx.sign(privateKey);
+          var serializedTx = tx.serialize();
+          web3.eth.sendRawTransaction(ethUtil.addHexPrefix(serializedTx.toString('hex')));
           myIdList[myid] = true;
-        });
-      } else {
-        var inputResultWithProof = ethAbi.rawEncode(["bytes32","string","bytes"],[myid,result,inputProof]).toString('hex');
-        var rawTx = {
-          nonce: web3.toHex(addressNonce),
-          gasPrice: web3.toHex(web3.eth.gasPrice), 
-          gasLimit: web3.toHex(gasLimit),
-          to: contractAddr, 
-          value: '0x00', 
-          data: '0x38BBFA50'+inputResultWithProof
-        };
-        var tx = new ethTx(rawTx);
-        tx.sign(privateKey);
-        var serializedTx = tx.serialize();
-        web3.eth.sendRawTransaction(ethUtil.addHexPrefix(serializedTx.toString('hex')));
-        myIdList[myid] = true;
-        addressNonce++;
+          addressNonce++;
+        }
+        console.log('proof: '+proof);
       }
-      console.log('proof: '+proof);
+      queryDoc.callback_complete = true;
+      queriesDb.update(queryDoc);
+      console.log('myid: '+myid);
+      console.log('result: '+result);
+      console.log('Contract '+contractAddr+ ' __callback called');
+    } catch(e) {
+      console.error("Callback tx error ",e);
     }
   }
-  queryDoc.callback_complete = true;
-  queriesDb.update(queryDoc);
-  console.log('myid: '+myid);
-  console.log('result: '+result);
-  (!listenOnlyMode) ? console.log('Contract '+contractAddr+ ' __callback called') : console.log('Contract __callback not called (listen only mode)');
 }

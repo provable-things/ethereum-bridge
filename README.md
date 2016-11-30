@@ -4,7 +4,7 @@ This tool enables any non-public blockchain instance to interact with the Oracli
 _Please note that at this point this tool is still **experimental** and subject to change without notice._
 
 ###Requirements
-- Node & npm
+- Node version >= 5.0.0 < 7.0.0 & npm
 
 ####Note
 (on Ubuntu)
@@ -16,7 +16,7 @@ run `sudo apt-get install build-essential -y`
 npm install
 ```
 
-Suggested version: node 6.0.0+ / npm 3.8.6+
+Suggested version: node 6.0.0 / npm 3.8.6
 
 ###How to use
 ```
@@ -59,3 +59,5 @@ contract test() {
   * `-p` : change the default PORT (8545) on localhost
   * `--key` : change the default key path (../keys.json) i.e. `node plugin --key /home/user/keys.json` 
   * `--gas` : change the default gas limit (3000000) used to deploy contracts
+  * `--resume` : resume all skipped queries
+  * `--skip` : skip all pending queries
