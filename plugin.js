@@ -543,7 +543,7 @@ function checkErrors(data){
       if(typeof data.result["errors"][0] != 'undefined') throw new Error(data.result.errors);
     }
   } catch(e){
-    console.error("error, skipping query...");
+    console.error("Query error");
     return true;
   }
   return false;
@@ -606,6 +606,7 @@ function runLog(){
         when: time,
         datasource: ds,
         query: formula,
+        id2: ethUtil.stripHexPrefix(myIdInitial),
         proof_type: parseInt(proofType)
     };
     console.log(formula);
@@ -728,32 +729,46 @@ function checkQueryStatus(queryDoc,myid,myIdInitial,contractAddress,proofType,ga
   console.log("Checking query status every 5 seconds..");
   var interval = setInterval(function(){
     queryStatus(myid, function(data){ console.log("Query result: "+JSON.stringify(data));  
-      if(data.result.checks==null) return; 
+      if(data.result.checks==null) return;
+      var dataProof = null;
       if(checkErrors(data)){
-        queryDoc.retry_number = 4;
+        queryDoc.active = false;
         updateDB(queryDoc,queriesDb);
         clearInterval(interval);
-        return;
+        if(containsProof(proofType)) {
+          dataProof = new Buffer('');
+        }
+        queryComplete(queryDoc, gasLimit, myIdInitial, null, dataProof, contractAddress);
       }
       var last_check = data.result.checks[data.result.checks.length-1];
       var query_result = last_check.results[last_check.results.length-1];
       var dataRes = query_result;
-      if (!last_check.success) return;
+      if(last_check.active==true) return;
       else clearInterval(interval);
-      var dataProof;
-      if(proofType!='0x00') dataProof = data.result.checks[data.result.checks.length-1]['proofs'][0];
-      if(dataProof==null && proofType!='0x00'){
-        dataProof = new Buffer('');
-      } else if(typeof dataProof == 'object' && proofType!='0x00'){
-        if(typeof dataProof.type != 'undefined' && typeof dataProof.value != 'undefined'){
-          dataProof = new Buffer(dataProof.value);
-        }
+      if(containsProof(proofType)) {
+        dataProof = getProof(data.result.checks[data.result.checks.length-1]['proofs'][0], proofType);
       }
       queryDoc.active = false;
       updateDB(queryDoc,queriesDb);
       queryComplete(queryDoc, gasLimit, myIdInitial, dataRes, dataProof, contractAddress);
     });
   }, 5*1000);
+}
+
+function containsProof(proofType){
+  if(ethUtil.addHexPrefix(proofType)=='0x00') return false;
+  else return true;
+}
+
+function getProof(proofContent, proofType){
+  if(!containsProof(proofType)) return null;
+  if(proofContent==null){
+    return new Buffer('');
+  } else if(typeof proofContent == 'object'){
+    if(typeof proofContent.type != 'undefined' && typeof proofContent.value != 'undefined'){
+      return new Buffer(proofContent.value);
+    }
+  } else return proofContent;
 }
 
 function queryComplete(queryDoc, gasLimit, myid, result, proof, contractAddr){
@@ -819,6 +834,7 @@ function queryComplete(queryDoc, gasLimit, myid, result, proof, contractAddr){
       console.log('Contract '+contractAddr+ ' __callback called');
     } catch(e) {
       console.error("Callback tx error ",e);
+      return;
     }
   }
 }
