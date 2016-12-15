@@ -582,16 +582,16 @@ function runLog(){
   }
 
   // Log1 event
-  contract.Log1([], [], function(err, data){
+  contract.Log1([{}], [{"fromBlock":"latest","toBlock":"latest"}], function(err, data){
     if (err == null){
       handleLog(data);
-    }
+    } else console.error(err);
   });
   // Log2 event
-  contract.Log2([], [], function(err, data){
+  contract.Log2([{}], [{"fromBlock":"latest","toBlock":"latest"}], function(err, data){
     if (err == null){
       handleLog(data);
-    }
+    } else console.error(err);
   });
 
   console.log('Listening @ '+oraclizeC+' (Oraclize Connector)\n');
