@@ -571,7 +571,6 @@ function checkErrors(data){
 function updateQueriesDB(doc){
   try {
     queriesDb.update(doc);
-    db.saveDatabase();
   } catch(e) {
     console.error("*** ERROR, doc not updated correctly, make sure your database is clean from already processed queries before starting again the "+BRIDGE_NAME,e);
   }
@@ -603,7 +602,7 @@ function runLog(){
     autoload: true,
     autoloadCallback: loadHandler,
     autosave: true,
-    autosaveInterval: 500
+    autosaveInterval: 1000
   });
 }
 
@@ -707,17 +706,18 @@ function handleLog(data){
 }
 
 function loadHandler(){
-  try {
-    request.get('https://api.oraclize.it/v1/platform/info', {json: true, headers: { 'X-User-Agent': BRIDGE_NAME+'/'+BRIDGE_VERSION+' (nodejs)' }}, function (error, response, body) {
-      if (error) console.error(error);
+  request.get('https://api.oraclize.it/v1/platform/info', {json: true, headers: { 'X-User-Agent': BRIDGE_NAME+'/'+BRIDGE_VERSION+' (nodejs)' }}, function (error, response, body) {
+    if (error) console.error(error);
+    try {
       if (response.statusCode == 200) {
+        if(!(BRIDGE_NAME in body.result.distributions)) return;
         var latestVersion = body.result.distributions[BRIDGE_NAME].latest.version;
         if(versionCompare(BRIDGE_VERSION,latestVersion)==-1){
           console.error("\n************************************************************************\nA NEW VERSION OF THIS TOOL HAS BEEN DETECTED\nIT IS HIGHLY RECOMMENDED THAT YOU ALWAYS RUN THE LATEST VERSION, PLEASE UPGRADE TO "+BRIDGE_NAME.toUpperCase()+" "+latestVersion+"\n************************************************************************\n");
         }
       }
-    });
-  } catch(e){}
+    } catch(e){}
+  });
 
   // create a new collection if none was found
   if(db.collections.length==0 || db.getCollection('queries')==null && db.getCollection('bridgeinfo')==null){
@@ -726,12 +726,6 @@ function loadHandler(){
   } else {
     queriesDb = db.getCollection('queries');
     bridgeinfoDb = db.getCollection('bridgeinfo');
-  }
-
-  if(db.getCollection('callbacktx')==null){
-    callbackTxDb = db.addCollection('callbacktx');
-  } else {
-    callbackTxDb = db.getCollection('callbacktx');
   }
 
   var storedVersion = bridgeinfoDb.get(1);
@@ -767,20 +761,17 @@ function loadHandler(){
     var targetUnix = parseInt(queryDoc.target_timestamp);
     var queryTimeDiff = targetUnix<parseInt(Date.now()/1000) ? 0 : targetUnix;
     if(!resumeQueries){
-      if(queryDoc.retry_number<=3){
-        queryDoc.retry_number += 1;
-        updateQueriesDB(queryDoc);
-      } else {
+      if(queryDoc.retry_number>3){
         console.log("Skipping "+queryDoc.myid+" query, exceeded 3 retries");
         continue;
       }
     }
     if(queryTimeDiff<=0){
-      console.log("Checking query status in 0 seconds");
+      console.log("Checking "+queryDoc.myid+" query status in 0 seconds");
       checkQueryStatus(queryDoc,queryDoc.myid,queryDoc.myIdInitial,queryDoc.contractAddress,queryDoc.proofType,queryDoc.gasLimit);
     } else {
       var targetDate = new Date(targetUnix*1000);
-      console.log("Checking query status on "+targetDate);
+      console.log("Checking "+queryDoc.myid+" query status on "+targetDate);
       schedule.scheduleJob(targetDate,function(){
         checkQueryStatus(queryDoc,queryDoc.myid,queryDoc.myIdInitial,queryDoc.contractAddress,queryDoc.proofType,queryDoc.gasLimit);
       });
@@ -861,7 +852,7 @@ function queryComplete(queryDoc, gasLimit, myid, result, proof, contractAddr){
         if(ops.address && !ops.broadcast){
           var callbackDefinition = [{"constant":false,"inputs":[{"name":"myid","type":"bytes32"},{"name":"result","type":"string"}],"name":"__callback","outputs":[],"type":"function"},{"inputs":[],"type":"constructor"}];
           web3.eth.contract(callbackDefinition).at(contractAddr).__callback(myid,result,{from:mainAccount,gas:web3.toHex(gasLimit),value:"0x0"}, function(e, contract){
-            if(e) throw new Error(e);
+            if(e) txErrorCallback(new Error(e),myid);
             myIdList[myid] = true;
           });
         } else {
@@ -877,7 +868,9 @@ function queryComplete(queryDoc, gasLimit, myid, result, proof, contractAddr){
           var tx = new ethTx(rawTx);
           tx.sign(privateKey);
           var serializedTx = tx.serialize();
-          web3.eth.sendRawTransaction(ethUtil.addHexPrefix(serializedTx.toString('hex')));
+          web3.eth.sendRawTransaction(ethUtil.addHexPrefix(serializedTx.toString('hex')), function(err,res){
+            if(err) txErrorCallback(new Error(err),myid);
+          });
           myIdList[myid] = true;
           addressNonce++;
         }
@@ -886,7 +879,7 @@ function queryComplete(queryDoc, gasLimit, myid, result, proof, contractAddr){
         if(ops.address && !ops.broadcast){
           var callbackDefinition = [{"constant":false,"inputs":[{"name":"myid","type":"bytes32"},{"name":"result","type":"string"},{"name":"proof","type":"bytes"}],"name":"__callback","outputs":[],"type":"function"},{"inputs":[],"type":"constructor"}];
           web3.eth.contract(callbackDefinition).at(contractAddr).__callback(myid,result,inputProof,{from:mainAccount,gas:web3.toHex(gasLimit),value:"0x0"}, function(e, contract){
-            if(e) throw new Error(e);
+            if(e) txErrorCallback(new Error(e),myid);
             myIdList[myid] = true;
           });
         } else {
@@ -902,7 +895,9 @@ function queryComplete(queryDoc, gasLimit, myid, result, proof, contractAddr){
           var tx = new ethTx(rawTx);
           tx.sign(privateKey);
           var serializedTx = tx.serialize();
-          web3.eth.sendRawTransaction(ethUtil.addHexPrefix(serializedTx.toString('hex')));
+          web3.eth.sendRawTransaction(ethUtil.addHexPrefix(serializedTx.toString('hex')),function(err,res){
+            if(err) txErrorCallback(new Error(err),myid);
+          });
           myIdList[myid] = true;
           addressNonce++;
         }
@@ -914,8 +909,18 @@ function queryComplete(queryDoc, gasLimit, myid, result, proof, contractAddr){
       console.log('result: '+result);
       console.log('Contract '+contractAddr+ ' __callback called');
     } catch(e) {
-      console.error("Callback tx error ",e);
+      console.error("Query error ",e);
       return;
     }
   }
+}
+
+function txErrorCallback(err,myid){
+  var queryDoc = queriesDb.findOne({'myIdInitial':myid});
+  console.log(err.message);
+  if(!err.message.match(/db/i)){
+    queryDoc.retry_number += 1;
+    updateQueriesDB(queryDoc);
+  }
+  console.error("Callback tx error ",err);
 }
