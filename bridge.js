@@ -277,6 +277,10 @@ if (ops.instance) {
   if (instanceKeyIndex > -1) {
     instances.splice(instanceKeyIndex, 1)
   }
+  var keepFile = instances.indexOf('.keep')
+  if (keepFile > -1) {
+    instances.splice(keepFile, 1)
+  }
   if (instances.length === 0) throw new Error('no instance files found')
   if (instanceToLoad !== 'latest' && instanceToLoad.indexOf('.json') === -1) {
     instanceToLoad += '.json'

@@ -82,7 +82,7 @@ contract test() {
     * `-a 0` : use account 0 on localhost:8545
     * `-a 0x123456 --broadcast` : load and use account 0x123456 (public-key) in your keys.json file (broadcast mode)
     * `-a 0 --broadcast` : use account at index n. 0 in your keys.json file (broadcast mode)
-  * `--instance` : load a previous configuration file (filename) you can also use 'latest' to load the latest confiuration file, i.e. `--instance oracle_instance_1483441110.json` `--instance latest`
+  * `--instance` : load a previous configuration file (filename) you can also use 'latest' to load the latest confiuration file, i.e. `--instance oracle_instance_1483441110.json` or `--instance latest`
   * `--from` `--to` : load and process logs starting --from (fromBlock) and --to (toBlock)  ('latest' is not allowed)  i.e. `--from 27384 --to 27387`
   * `--oar` : to specify the OAR address already deployed i.e. `--oar 0xEnterYourOarCustomAddress`
   * `-H` : change the default node (localhost:8545)

@@ -4,5 +4,7 @@ keys.json
 *.tmp
 *.swp
 config/db.json
+!database/.keep
 database/*
 config/instance/*
+!config/instance/.keep
