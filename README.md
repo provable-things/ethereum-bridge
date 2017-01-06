@@ -4,7 +4,7 @@ This tool enables any non-public blockchain instance to interact with the Oracli
 _Please note that at this point this tool is still **experimental** and subject to change without notice._
 
 ###Requirements
-- Node version >= 5.0.0 < 7.0.0 & npm
+- node version **>= 5.0.0 < 7.0.0** (& npm)
 
 ####Note
 (on Ubuntu)
@@ -16,15 +16,42 @@ run `sudo apt-get install build-essential -y`
 npm install
 ```
 
-Suggested version: node 6.0.0 / npm 3.8.6
+Suggested version: node 6.9.1
 
 ###How to use
-```
-node plugin -H localhost:8545 -a 0
-```
-(will start the ethereum-bridge on localhost:8545 and use account 0)
+
+You have 2 options:
+ * [active mode](#active-mode) (deploy and query contracts using one account on your main node) [DEFAULT]
+ * [broadcast mode](#broadcast-mode) (deploy and query contracts using a local account (the node will be used only to broadcast the txs))
+
+After you have correctly deployed the address resolver and the connector on your blockchain you can load the previous instance using the `--oar` flag (with the latest oar address generated) or using `--instance latest`
 
 see also [optional flags](#optional-flags)
+
+####Active mode
+
+```
+node bridge -H localhost:8545 -a 1
+```
+(deploy contracts using the account 1 found on the localhost:8545 node)
+
+
+####Broadcast mode
+
+Generate a new local address:
+
+```
+node bridge -H localhost:8545 --broadcast --new
+```
+(generate a new address locally and deploy contracts (txs broadcasted to localhost:8545 node))
+
+or if you already have one or more account in your keys.json file:
+
+```
+node bridge -H localhost:8545 --broadcast -a 0
+```
+(load the first account in your keys.json file (index n.0) and deploy contracts (txs broadcasted to localhost:8545 node))
+
 
 **Follow the console message**
 
@@ -49,15 +76,19 @@ contract test() {
 ###Optional flags
 
 * optional:
-  * run the script without flags to generate a new local address (private key automatically saved in ethereum-bridge/keys.json)
-  * `--broadcast` : enable offline tx signing (your eth node will be used to broadcast the raw transaction) **the broadcast mode will load your local keys.json file**
-  * `-a` : change the default account used to deploy and call the transactions i.e:
-    * `node plugin -a 0` : use account 0 on localhost:8545
-    * `node plugin -a 0 --broadcast` : use account at index n. 0 in your keys.json file (broadcast mode)
-  * `--oar` : to specify the OAR address already deployed i.e. `node plugin --oar EnterYourOarCustomAddress`
-  * `-H` : change the default eth node (localhost:8545)
+  * `--broadcast --new` : generate a new local address (private key automatically saved in ./config/instance/keys.json), and deploy contracts using the new address
+  * `--broadcast` : enable offline tx signing (your node will be used to broadcast the raw transaction) **the broadcast mode will load your local keys.json file**
+  * `-a` : change the default account used to deploy and call the transactions (account index and hex address are allowed) i.e:
+    * `-a 0` : use account 0 on localhost:8545
+    * `-a 0x123456 --broadcast` : load and use account 0x123456 (public-key) in your keys.json file (broadcast mode)
+    * `-a 0 --broadcast` : use account at index n. 0 in your keys.json file (broadcast mode)
+  * `--instance` : load a previous configuration file (filename) you can also use 'latest' to load the latest confiuration file, i.e. `--instance oracle_instance_1483441110.json` `--instance latest`
+  * `--from` `--to` : load and process logs starting --from (fromBlock) and --to (toBlock)  ('latest' is not allowed)  i.e. `--from 27384 --to 27387`
+  * `--oar` : to specify the OAR address already deployed i.e. `--oar 0xEnterYourOarCustomAddress`
+  * `-H` : change the default node (localhost:8545)
   * `-p` : change the default PORT (8545) on localhost
-  * `--key` : change the default key path (../keys.json) i.e. `node plugin --key /home/user/keys.json` 
+  * `--url` : change the default node with an url (http://localhost:8545)
+  * `--key` : change the default key path (./config/instance/keys.json) i.e. `--key /home/user/keys.json` 
   * `--gas` : change the default gas limit (3000000) used to deploy contracts
   * `--resume` : resume all skipped queries
   * `--skip` : skip all pending queries

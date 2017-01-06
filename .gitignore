@@ -2,4 +2,7 @@ node_modules
 keys.json
 *.log
 *.tmp
+*.swp
 config/db.json
+database/*
+config/instance/*

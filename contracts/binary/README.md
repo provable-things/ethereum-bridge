@@ -1,19 +1,22 @@
 ##Binary info
 
-Compiler version: 0.3.6-3fc68da5
+###oraclizeConnector.binary
+
+Compiler version: 0.4.6-2dabbdf0
 
 Optimization: Enabled
 
+Contract source: [oraclizeConnector.sol](../ethereum-api/connectors/oraclizeConnector.sol)
 
-###oraclizeConnector.binary
-
-Contract: ethereum-bridge/contracts/ethereum-api/connectors/oraclizeConnector.sol
-
-Name: Oraclize
+Contract name: Oraclize
 
 
 ###addressResolver.binary
 
-Contract: ethereum-bridge/contracts/ethereum-api/connectors/addressResolver.sol
+Compiler version: 0.3.6-3fc68da5
 
-Name: OraclizeAddrResolver
+Optimization: Enabled
+
+Contract source: [addressResolver.sol](../ethereum-api/connectors/addressResolver.sol)
+
+Contract name: OraclizeAddrResolver
