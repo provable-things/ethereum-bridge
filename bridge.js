@@ -126,7 +126,7 @@ var ops = stdio.getopt({
   'abiconn': {args: 1, description: 'Load custom connector abi interface (path)'},
   'abioar': {args: 1, description: 'Load custom oar abi interface (path)'},
   'newconn': {description: 'Generate and update the OAR with the new connector address'},
-  //'changeconn': {args:1, description: 'Provide a connector address and update the OAR with the new connector address'},
+  // 'changeconn': {args:1, description: 'Provide a connector address and update the OAR with the new connector address'},
   'loadabi': {description: 'Load default abi interface (under ' + BRIDGE_NAME + '/contracts/abi)'},
   'from': {args: 1, description: 'fromBlock (number) to resume logs (--to is required)'},
   'to': {args: 1, description: 'toBlock (number) to resume logs (--from is required)'},
@@ -334,11 +334,11 @@ function oracleFromConfig (config) {
         if (answ.match(/y/)) {
           rl.close()
           console.log('Please wait...')
-          activeOracleInstance.deployConnector(function(err, connectorRes) {
+          activeOracleInstance.deployConnector(function (err, connectorRes) {
             if (err) throw new Error(err)
             if (connectorRes.success === true) {
-              logger.info('successfully generated a new connector',connectorRes.connector)
-              activeOracleInstance.setAddr(activeOracleInstance.oar, connectorRes.connector, function(err, res) {
+              logger.info('successfully generated a new connector', connectorRes.connector)
+              activeOracleInstance.setAddr(activeOracleInstance.oar, connectorRes.connector, function (err, res) {
                 if (err) throw new Error(err)
                 if (res.success === true) {
                   oraclizeConfiguration.connector = connectorRes.connector
@@ -364,7 +364,7 @@ function processPendingQueries (oar, connector, cbAddress) {
   connector = connector || activeOracleInstance.connector
   cbAddress = cbAddress || activeOracleInstance.account
   logger.info('fetching pending queries from database with oar:', oar, 'connector:', connector, 'callback address:', cbAddress)
-  Query.find({where: {'$and': [{'$or': [{'callback_complete': false}, {'query_active': true}], 'oar': oar, 'connector': connector, 'cbAddress': cbAddress}]}, order: 'timestamp_db ASC'}, function (err, pendingQueries) {
+  Query.find({where: {'$and': [{'$or': [{'callback_complete': false}, {'query_active': true}], 'oar': oar, 'cbAddress': cbAddress}]}, order: 'timestamp_db ASC'}, function (err, pendingQueries) {
     if (err) logger.error('fetching queries error', err)
     else {
       logger.info('found a total of', pendingQueries.length, 'pending queries')
@@ -407,9 +407,9 @@ function loadConfigFile (file) {
     mode = configFile.mode
     defaultnode = configFile.node.main
     startUpLog()
-    setTimeout(function() {
+    setTimeout(function () {
       oracleFromConfig(configFile)
-    }, 200);
+    }, 200)
   } else return logger.error(file + ' configuration is not valid')
 }
 
@@ -573,7 +573,7 @@ function runLog () {
 
   isTestRpc = nodeType.match(/TestRPC/) ? true : false
 
-  logger.info('connected to node type',nodeType)
+  logger.info('connected to node type', nodeType)
 
   if (isTestRpc) logger.warn('re-org block listen is disabled when using testrpc')
 
