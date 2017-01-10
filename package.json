@@ -1,6 +1,6 @@
 {
   "name": "ethereum-bridge",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Ethereum logs listener to connect Oraclize onchain events to the Oraclize offchain engine",
   "main": "bridge.js",
   "dependencies": {
@@ -21,7 +21,7 @@
     "stdio": "~0.2.7",
     "tingodb": "^0.5.1",
     "underscore": "^1.8.3",
-    "web3": "~0.17.0-beta",
+    "web3": "~0.18.0",
     "winston": "^2.3.0"
   },
   "devDependencies": {

@@ -363,7 +363,7 @@ function processPendingQueries (oar, connector, cbAddress) {
   oar = oar || activeOracleInstance.oar
   connector = connector || activeOracleInstance.connector
   cbAddress = cbAddress || activeOracleInstance.account
-  logger.info('fetching pending queries from database with oar:', oar, 'connector:', connector, 'callback address:', cbAddress)
+  logger.info('fetching pending queries from database with oar:', oar, 'and callback address:', cbAddress)
   Query.find({where: {'$and': [{'$or': [{'callback_complete': false}, {'query_active': true}], 'oar': oar, 'cbAddress': cbAddress}]}, order: 'timestamp_db ASC'}, function (err, pendingQueries) {
     if (err) logger.error('fetching queries error', err)
     else {
@@ -376,20 +376,21 @@ function processPendingQueries (oar, connector, cbAddress) {
       } else if (resumeQueries === true) {
         logger.warn('forcing the resume of all pending queries')
       }
-      for (var i = 0; i < pendingQueries.length; i++) {
-        if (pendingQueries[i].callback_error === true) logger.warn('skipping', pendingQueries[i].contract_myid, 'because of __callback tx error')
-        else if (pendingQueries[i].retry_number < 3 || resumeQueries) {
-          var targetUnix = parseInt(pendingQueries[i].target_timestamp)
+      async.each(pendingQueries, function (thisPendingQuery, callback) {
+        if (thisPendingQuery.callback_error === true) logger.warn('skipping', thisPendingQuery.contract_myid, 'because of __callback tx error')
+        else if (thisPendingQuery.retry_number < 3 || resumeQueries) {
+          var targetUnix = parseInt(thisPendingQuery.target_timestamp)
           var queryTimeDiff = targetUnix < parseInt(Date.now() / 1000) ? 0 : targetUnix
-          logger.info('re-processing query number ' + (i + 1), {'contact_address:': pendingQueries[i].contact_address, 'contact_myid': pendingQueries[i].contract_myid, 'http_myid': pendingQueries[i].http_myid})
+          logger.info('re-processing query', {'contact_address:': thisPendingQuery.contact_address, 'contact_myid': thisPendingQuery.contract_myid, 'http_myid': thisPendingQuery.http_myid})
           if (queryTimeDiff <= 0) {
-            checkQueryStatus(pendingQueries[i].http_myid, pendingQueries[i].contract_myid, pendingQueries[i].contract_address, pendingQueries[i].proof_type, pendingQueries[i].gas_limit)
+            checkQueryStatus(thisPendingQuery.http_myid, thisPendingQuery.contract_myid, thisPendingQuery.contract_address, thisPendingQuery.proof_type, thisPendingQuery.gas_limit)
           } else {
             var targetDate = new Date(targetUnix * 1000)
-            processQueryInFuture(targetDate, pendingQueries[i])
+            processQueryInFuture(targetDate, thisPendingQuery)
           }
-        } else logger.warn('skipping', pendingQueries[i].contract_myid, 'query, exceeded 3 retries')
-      }
+          callback()
+        } else logger.warn('skipping', thisPendingQuery.contract_myid, 'query, exceeded 3 retries')
+      })
     }
   })
 }
@@ -576,9 +577,7 @@ function runLog () {
   logger.info('connected to node type', nodeType)
 
   if (isTestRpc) logger.warn('re-org block listen is disabled when using testrpc')
-
-  // chain re-org listen
-  reorgListen()
+  else reorgListen()
 
   logger.info('Listening @ ' + activeOracleInstance.connector + ' (Oraclize Connector)\n')
 
@@ -634,7 +633,8 @@ function fetchLogsByBlock (fromBlock, toBlock, reorgType) {
   if (isTestRpc) return
   // fetch all connector events
   try {
-    var log1e = activeOracleInstance.getContractInstance().Log1({}, {'fromBlock': fromBlock, 'toBlock': toBlock})
+    var contractInstance = activeOracleInstance.getContractInstance()
+    var log1e = contractInstance.Log1({}, {'fromBlock': fromBlock, 'toBlock': toBlock})
     log1e.get(function (err, data) {
       if (err == null) {
         parseMultipleLogs(data)
@@ -645,7 +645,7 @@ function fetchLogsByBlock (fromBlock, toBlock, reorgType) {
       }
     })
 
-    var log2e = activeOracleInstance.getContractInstance().Log2({}, {'fromBlock': fromBlock, 'toBlock': toBlock})
+    var log2e = contractInstance.Log2({}, {'fromBlock': fromBlock, 'toBlock': toBlock})
     log2e.get(function (err, data) {
       if (err == null) {
         parseMultipleLogs(data)
@@ -655,8 +655,9 @@ function fetchLogsByBlock (fromBlock, toBlock, reorgType) {
         manageErrors(err)
       }
     })
+
     if (activeOracleInstance.availableLogs.indexOf('LogN') > -1) {
-      var logNe = activeOracleInstance.getContractInstance().LogN({}, {'fromBlock': fromBlock, 'toBlock': toBlock})
+      var logNe = contractInstance.LogN({}, {'fromBlock': fromBlock, 'toBlock': toBlock})
       logNe.get(function (err, data) {
         if (err == null) {
           parseMultipleLogs(data)
@@ -681,7 +682,8 @@ function fetchLogsByBlock (fromBlock, toBlock, reorgType) {
 function fetchLogs () {
   // fetch all connector events
   try {
-    activeOracleInstance.getContractInstance().Log1({'fromBlock': 'latest', 'toBlock': 'latest'}, function (err, data) {
+    var contractInstance = activeOracleInstance.getContractInstance()
+    contractInstance.Log1({'fromBlock': 'latest', 'toBlock': 'latest'}, function (err, data) {
       if (err == null) {
         manageLog(data)
       } else {
@@ -689,7 +691,8 @@ function fetchLogs () {
         manageErrors(err)
       }
     })
-    activeOracleInstance.getContractInstance().Log2({'fromBlock': 'latest', 'toBlock': 'latest'}, function (err, data) {
+
+    contractInstance.Log2({'fromBlock': 'latest', 'toBlock': 'latest'}, function (err, data) {
       if (err == null) {
         manageLog(data)
       } else {
@@ -697,8 +700,9 @@ function fetchLogs () {
         manageErrors(err)
       }
     })
+
     if (activeOracleInstance.availableLogs.indexOf('LogN') > -1) {
-      activeOracleInstance.getContractInstance().LogN({'fromBlock': 'latest', 'toBlock': 'latest'}, function (err, data) {
+      contractInstance.LogN({'fromBlock': 'latest', 'toBlock': 'latest'}, function (err, data) {
         if (err == null) {
           manageLog(data)
         } else {
@@ -713,9 +717,10 @@ function fetchLogs () {
 }
 
 function parseMultipleLogs (data) {
-  for (var i = 0; i < data.length; i++) {
-    manageLog(data[i])
-  }
+  async.each(data, function(log, callback) {
+    manageLog(log)
+    callback()
+  })
 }
 
 function manageLog (data) {
@@ -791,20 +796,22 @@ function handleLog (data) {
       proof_type: bridgeUtil.toInt(proofType)
     }
     createQuery(query, function (data) {
-      if (typeof data.result.id === undefined) return logger.error('no HTTP myid found, skipping log...')
+      if (typeof data.result.id === 'undefined') return logger.error('no HTTP myid found, skipping log...')
       myid = data.result.id
       logger.info('new HTTP query created, id: ' + myid)
       var unixTime = parseInt(Date.now() / 1000)
       var queryCheckUnixTime = getQueryUnixTime(time, unixTime)
-      Query.create({'active': true, 'callback_complete': false, 'retry_number': 0, 'target_timestamp': queryCheckUnixTime, 'oar': activeOracleInstance.oar, 'connector': activeOracleInstance.connector, 'cbAddress': activeOracleInstance.account, 'http_myid': myid, 'contract_myid': myIdInitial, 'query_delay': time, 'query_arg': JSON.stringify(formula), 'query_datasource': ds, 'contract_address': cAddr, 'event_tx': eventTx, 'block_tx_hash': blockHashTx, 'proof_type': proofType, 'gas_limit': gasLimit})
-      if (queryCheckUnixTime <= 0) {
-        logger.info('checking HTTP query ' + myid + ' status in 0 seconds')
-        checkQueryStatus(myid, myIdInitial, cAddr, proofType, gasLimit)
-      } else {
-        var targetDate = new Date(queryCheckUnixTime * 1000)
-        processQueryInFuture(targetDate, {'active': true, 'callback_complete': false, 'retry_number': 0, 'target_timestamp': queryCheckUnixTime, 'oar': activeOracleInstance.oar, 'connector': activeOracleInstance.connector, 'cbAddress': activeOracleInstance.account, 'http_myid': myid, 'contract_myid': myIdInitial, 'query_delay': time, 'query_arg': JSON.stringify(formula), 'query_datasource': ds, 'contract_address': cAddr, 'event_tx': eventTx, 'block_tx_hash': blockHashTx, 'proof_type': proofType, 'gas_limit': gasLimit})
-      }
-      myIdList = arrayCleanUp(myIdList)
+      Query.create({'active': true, 'callback_complete': false, 'retry_number': 0, 'target_timestamp': queryCheckUnixTime, 'oar': activeOracleInstance.oar, 'connector': activeOracleInstance.connector, 'cbAddress': activeOracleInstance.account, 'http_myid': myid, 'contract_myid': myIdInitial, 'query_delay': time, 'query_arg': JSON.stringify(formula), 'query_datasource': ds, 'contract_address': cAddr, 'event_tx': eventTx, 'block_tx_hash': blockHashTx, 'proof_type': proofType, 'gas_limit': gasLimit}, function (err, res) {
+        if (err !== null) logger.error('query db create error',err)
+        if (queryCheckUnixTime <= 0) {
+          logger.info('checking HTTP query ' + myid + ' status in 0 seconds')
+          checkQueryStatus(myid, myIdInitial, cAddr, proofType, gasLimit)
+        } else {
+          var targetDate = new Date(queryCheckUnixTime * 1000)
+          processQueryInFuture(targetDate, {'active': true, 'callback_complete': false, 'retry_number': 0, 'target_timestamp': queryCheckUnixTime, 'oar': activeOracleInstance.oar, 'connector': activeOracleInstance.connector, 'cbAddress': activeOracleInstance.account, 'http_myid': myid, 'contract_myid': myIdInitial, 'query_delay': time, 'query_arg': JSON.stringify(formula), 'query_datasource': ds, 'contract_address': cAddr, 'event_tx': eventTx, 'block_tx_hash': blockHashTx, 'proof_type': proofType, 'gas_limit': gasLimit})
+        }
+        myIdList = arrayCleanUp(myIdList)
+      })
     })
   } catch (e) {
     logger.error('handle log error ', e)
