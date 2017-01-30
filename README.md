@@ -92,3 +92,4 @@ contract test() {
   * `--gas` : change the default gas limit (3000000) used to deploy contracts
   * `--resume` : resume all skipped queries
   * `--skip` : skip all pending queries
+  * `--dev` : skip contract myid check and pending queries (usufuel for local testing)

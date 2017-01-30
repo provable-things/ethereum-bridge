@@ -118,6 +118,7 @@ var ops = stdio.getopt({
   'broadcast': {description: 'broadcast only mode, a json key file with the private key is mandatory to sign all transactions'},
   'gas': {args: 1, description: 'change gas amount limit used to deploy contracts(in wei) (default: ' + defaultGas + ')'},
   'key': {args: 1, description: 'JSON key file path (default: ' + keyFilePath + ')'},
+  'dev': {description: 'Enable dev mode (skip contract myid check)'},
   'new': {description: 'Generate and save a new address in ' + keyFilePath + ' file'},
   'logfile': {args: 1, description: 'bridge log file path (default: current bridge folder)'},
   'nocomp': {description: 'disable contracts compilation'},
@@ -213,6 +214,11 @@ if (defaultnode.indexOf(':') === -1) {
   defaultnode = 'http://' + defaultnode + ':8545'
 } else if (defaultnode.indexOf('http') === -1) {
   defaultnode = 'http://' + defaultnode
+}
+
+if (ops.dev) {
+  skipQueries = true
+  logger.warn('--dev mode active, contract myid checks and pending queries are skipped, use this only when testing, not in production')
 }
 
 if (ops.broadcast) {
@@ -717,7 +723,7 @@ function fetchLogs () {
 }
 
 function parseMultipleLogs (data) {
-  async.each(data, function(log, callback) {
+  async.each(data, function (log, callback) {
     manageLog(log)
     callback()
   })
@@ -743,6 +749,7 @@ function manageLog (data) {
 }
 
 function isAlreadyProcessed (contractMyid, cb) {
+  if (ops.dev === true) return cb(null, false)
   Query.findOne({where: {'contract_myid': contractMyid}}, function (err, query1) {
     if (err) logger.error('Query database findOne error', err)
     CallbackTx.findOne({where: {'contract_myid': contractMyid}}, function (err2, query2) {
@@ -802,7 +809,7 @@ function handleLog (data) {
       var unixTime = parseInt(Date.now() / 1000)
       var queryCheckUnixTime = getQueryUnixTime(time, unixTime)
       Query.create({'active': true, 'callback_complete': false, 'retry_number': 0, 'target_timestamp': queryCheckUnixTime, 'oar': activeOracleInstance.oar, 'connector': activeOracleInstance.connector, 'cbAddress': activeOracleInstance.account, 'http_myid': myid, 'contract_myid': myIdInitial, 'query_delay': time, 'query_arg': JSON.stringify(formula), 'query_datasource': ds, 'contract_address': cAddr, 'event_tx': eventTx, 'block_tx_hash': blockHashTx, 'proof_type': proofType, 'gas_limit': gasLimit}, function (err, res) {
-        if (err !== null) logger.error('query db create error',err)
+        if (err !== null) logger.error('query db create error', err)
         if (queryCheckUnixTime <= 0) {
           logger.info('checking HTTP query ' + myid + ' status in 0 seconds')
           checkQueryStatus(myid, myIdInitial, cAddr, proofType, gasLimit)
