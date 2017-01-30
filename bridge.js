@@ -735,7 +735,7 @@ function manageLog (data) {
     var contractMyid = data.args['cid']
     isAlreadyProcessed(contractMyid, function (err, isProcessed) {
       if (err) isProcessed = false
-      if (isProcessed === false && myIdList.indexOf(contractMyid) === -1) {
+      if (isProcessed === false) {
         if (activeOracleInstance.isOracleEvent(data)) {
           handleLog(data)
         } else {
@@ -750,6 +750,15 @@ function manageLog (data) {
 
 function isAlreadyProcessed (contractMyid, cb) {
   if (ops.dev === true) return cb(null, false)
+  isAlreadyProcessedDb(contractMyid, function(err, isProcessed) {
+    if (err) return cb(err, null)
+    if (isProcessed === true) return cb(null, true)
+    else if (isProcessed === false && myIdList.indexOf(contractMyid) === -1) return cb(null, false)
+    else return cb(null, isProcessed)
+  })
+}
+
+function isAlreadyProcessedDb (contractMyid, cb) {
   Query.findOne({where: {'contract_myid': contractMyid}}, function (err, query1) {
     if (err) logger.error('Query database findOne error', err)
     CallbackTx.findOne({where: {'contract_myid': contractMyid}}, function (err2, query2) {
