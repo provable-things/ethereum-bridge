@@ -750,7 +750,7 @@ function manageLog (data) {
 
 function isAlreadyProcessed (contractMyid, cb) {
   if (ops.dev === true) return cb(null, false)
-  isAlreadyProcessedDb(contractMyid, function(err, isProcessed) {
+  isAlreadyProcessedDb(contractMyid, function (err, isProcessed) {
     if (err) return cb(err, null)
     if (isProcessed === true) return cb(null, true)
     else if (isProcessed === false && myIdList.indexOf(contractMyid) === -1) return cb(null, false)
@@ -913,10 +913,9 @@ function queryComplete (gasLimit, myid, result, proof, contractAddr, proofType) 
     if (typeof gasLimit === 'undefined' || typeof myid === 'undefined' || typeof contractAddr === 'undefined' || typeof proofType === 'undefined') {
       return queryCompleteErrors('queryComplete error, __callback arguments are empty')
     }
-    Query.findOne({where: {'contract_myid': myid}}, function (err, res) {
-      if (err) return queryCompleteErrors('queryComplete find query error', err)
-      if (res === null) return queryCompleteErrors('queryComplete error, query with contract myid ' + myid + ' not found in database')
-      if (res.callback_complete === true) return queryCompleteErrors('queryComplete error, __callback for contract myid', myid, 'was already called before, skipping...')
+    checkCallbackTx(myid, function (findErr, alreadyCalled) {
+      if (findErr !== null) return queryCompleteErrors(findErr)
+      if (alreadyCalled === true) return queryCompleteErrors('queryComplete error, __callback for contract myid', myid, 'was already called before, skipping...')
       var callbackData = bridgeUtil.callbackTxEncode(myid, result, proof, proofType)
       activeOracleInstance.sendTx({'from': activeOracleInstance.account, 'to': bridgeCore.ethUtil.addHexPrefix(contractAddr), 'gas': gasLimit, 'data': callbackData}, function (err, contract) {
         var callbackObj = {'myid': myid, 'result': result, 'proof': proof}
@@ -930,7 +929,19 @@ function queryComplete (gasLimit, myid, result, proof, contractAddr, proofType) 
     })
   } catch (e) {
     logger.error('queryComplete error ', e)
+    callbackRunning = false
   }
+}
+
+function checkCallbackTx (myid, callback) {
+  if (ops.dev === true) return callback(null, false)
+  Query.findOne({where: {'contract_myid': myid}}, function (err, res) {
+    if (err) return callback(err, null)
+    if (res === null) return callback(new Error('queryComplete error, query with contract myid ' + myid + ' not found in database'), null)
+    if (typeof res.callback_complete === 'undefined') return callback(new Error('queryComplete error, query with contract myid ' + myid), null)
+    if (res.callback_complete === true) return callback(null, true)
+    else return callback(null, false)
+  })
 }
 
 function manageErrors (err) {
@@ -967,11 +978,11 @@ function manageErrors (err) {
   }
 }
 
-function queryCompleteErrors (msg, err) {
+function queryCompleteErrors (err) {
   callbackRunning = false
+  logger.error(err)
   if (err) {
     manageErrors(err)
-    logger.error(msg, err)
   }
 }
 
