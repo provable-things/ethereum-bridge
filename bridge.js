@@ -784,7 +784,7 @@ function handleLog (data) {
     var blockHashTx = data['blockHash']
     data = data['args']
     var myIdInitial = data['cid']
-    if (myIdList.indexOf(myIdInitial) > -1) return
+    if (ops.dev !== true && myIdList.indexOf(myIdInitial) > -1) return
     myIdList.push(myIdInitial)
     latestBlockNumber = bridgeCore.web3.eth.blockNumber
     var myid = myIdInitial
