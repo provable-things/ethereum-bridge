@@ -108,6 +108,7 @@ var isTestRpc = false
 var reorgInterval = []
 var blockRangeResume = []
 var pricingInfo = []
+var basePrice = 0 // in ETH
 
 var ops = stdio.getopt({
   'instance': {args: 1, description: 'filename of the oracle configuration file that can be found in ./config/instance/ (i.e. oracle_instance_148375903.json)'},
@@ -337,7 +338,7 @@ function oracleFromConfig (config) {
         output: process.stdout
       })
       rl.question('Are you sure you want to generate a new connector and update the Address Resolver? [Y/n]: ', function (answ) {
-        var answ = answ.toLowerCase()
+        answ = answ.toLowerCase()
         if (answ.match(/y/)) {
           rl.close()
           console.log('Please wait...')
@@ -463,7 +464,16 @@ function checkBridgeVersion () {
           logger.warn('\n************************************************************************\nA NEW VERSION OF THIS TOOL HAS BEEN DETECTED\nIT IS HIGHLY RECOMMENDED THAT YOU ALWAYS RUN THE LATEST VERSION, PLEASE UPGRADE TO ' + BRIDGE_NAME.toUpperCase() + ' ' + latestVersion + '\n************************************************************************\n')
         }
         if (typeof body.result.pricing !== 'undefined' && typeof body.result.quotes !== 'undefined') {
-
+          var datasources = body.result.pricing.datasources
+          var proofPricing = body.result.pricing.proofs
+          basePrice = body.result.quotes.ETH
+          for (var i = 0; i < datasources.length; i++) {
+            var thisDatasource = datasources[i]
+            for (var j = 0; j < thisDatasource.proof_types.length; j++) {
+              var units = thisDatasource.units + proofPricing[thisDatasource.proof_types[j]].units
+              pricingInfo.push({"name": thisDatasource.name, "proof": thisDatasource.proof_types[j], "units": units})
+            }
+          }
         }
       }
     } catch (e) {}
