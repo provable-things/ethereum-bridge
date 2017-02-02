@@ -129,6 +129,9 @@ var ops = stdio.getopt({
   'abiconn': {args: 1, description: 'Load custom connector abi interface (path)'},
   'abioar': {args: 1, description: 'Load custom oar abi interface (path)'},
   'newconn': {description: 'Generate and update the OAR with the new connector address'},
+  'update-ds': {description: 'Update datasource price (pricing is taken from the oracle instance configuration file)'},
+  'update-price': {description: 'Update base price (pricing is taken from the oracle instance configuration file)'},
+  'remote-price': {description: 'Use the remote API to get the pricing info'},
   // 'changeconn': {args:1, description: 'Provide a connector address and update the OAR with the new connector address'},
   'loadabi': {description: 'Load default abi interface (under ' + BRIDGE_NAME + '/contracts/abi)'},
   'from': {args: 1, description: 'fromBlock (number) to resume logs (--to is required)'},
@@ -323,7 +326,7 @@ function toFullPath (filePath) {
 
 function oracleFromConfig (config) {
   try {
-    if (pricingInfo.length > 0 && basePrice > 0) {
+    if ((pricingInfo.length > 0 && basePrice > 0 && typeof config.onchain_config === 'undefined') || ops['remote-price'] === true) {
       config.onchain_config = {}
       config.onchain_config.pricing = pricingInfo
       config.onchain_config.base_price = basePrice
@@ -335,6 +338,21 @@ function oracleFromConfig (config) {
     logger.info('OAR found:', activeOracleInstance.oar)
     logger.info('connector found:', activeOracleInstance.connector)
     logger.info('callback address:', activeOracleInstance.account)
+
+    if (ops['update-ds'] === true) {
+      async.each(config.onchain_config.pricing, function (thisPrice, innerCallback) {
+        logger.info('updating datasource', thisPrice)
+        activeOracleInstance.addDSource(activeOracleInstance.connector, thisPrice, innerCallback)
+      })
+    }
+
+    if (ops['update-price'] === true) {
+      activeOracleInstance.setBasePrice(activeOracleInstance.connector, config.onchain_config.base_price, function (err, res) {
+        if (err) return logger.error('update price error', err)
+        else logger.info('base price updated to', config.onchain_config.base_price, BLOCKCHAIN_BASE_UNIT)
+      })
+    }
+
     if (!ops.newconn) runLog()
     else {
       var rl = readline.createInterface({
