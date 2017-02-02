@@ -340,9 +340,15 @@ function oracleFromConfig (config) {
     logger.info('callback address:', activeOracleInstance.account)
 
     if (ops['update-ds'] === true) {
-      async.each(config.onchain_config.pricing, function (thisPrice, innerCallback) {
+      async.each(config.onchain_config.pricing, function (thisPrice, next) {
         logger.info('updating datasource', thisPrice)
-        activeOracleInstance.addDSource(activeOracleInstance.connector, thisPrice, innerCallback)
+        activeOracleInstance.addDSource(activeOracleInstance.connector, thisPrice, function(err, res) {
+          if (err) logger.error('failed to update',thisPrice,'error',err)
+          next()
+        })
+      }, function(err) {
+        if (err) logger.error('updating datasource error', err)
+        else logger.info('updating datasource done')
       })
     }
 
