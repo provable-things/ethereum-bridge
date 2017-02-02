@@ -343,8 +343,11 @@ function oracleFromConfig (config) {
       async.each(config.onchain_config.pricing, function (thisPrice, next) {
         logger.info('updating datasource', thisPrice)
         activeOracleInstance.addDSource(activeOracleInstance.connector, thisPrice, function(err, res) {
-          if (err) logger.error('failed to update',thisPrice,'error',err)
-          next()
+          if (err) {
+            logger.error('failed to update',thisPrice,'error',err)
+            return next(err)
+          }
+          next(null)
         })
       }, function(err) {
         if (err) logger.error('updating datasource error', err)
@@ -424,7 +427,7 @@ function processPendingQueries (oar, connector, cbAddress) {
             var targetDate = new Date(targetUnix * 1000)
             processQueryInFuture(targetDate, thisPendingQuery)
           }
-          callback()
+          callback(null)
         } else logger.warn('skipping', thisPendingQuery.contract_myid, 'query, exceeded 3 retries')
       })
     }
@@ -777,7 +780,7 @@ function fetchLogs () {
 function parseMultipleLogs (data) {
   async.each(data, function (log, callback) {
     manageLog(log)
-    callback()
+    callback(null)
   })
 }
 
