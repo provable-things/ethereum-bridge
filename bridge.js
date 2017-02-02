@@ -107,6 +107,7 @@ var latestBlockNumber = -1
 var isTestRpc = false
 var reorgInterval = []
 var blockRangeResume = []
+var pricingInfo = []
 
 var ops = stdio.getopt({
   'instance': {args: 1, description: 'filename of the oracle configuration file that can be found in ./config/instance/ (i.e. oracle_instance_148375903.json)'},
@@ -460,6 +461,9 @@ function checkBridgeVersion () {
         var latestVersion = body.result.distributions[BRIDGE_NAME].latest.version
         if (versionCompare(BRIDGE_VERSION, latestVersion) === -1) {
           logger.warn('\n************************************************************************\nA NEW VERSION OF THIS TOOL HAS BEEN DETECTED\nIT IS HIGHLY RECOMMENDED THAT YOU ALWAYS RUN THE LATEST VERSION, PLEASE UPGRADE TO ' + BRIDGE_NAME.toUpperCase() + ' ' + latestVersion + '\n************************************************************************\n')
+        }
+        if (typeof body.result.pricing !== 'undefined' && typeof body.result.quotes !== 'undefined') {
+
         }
       }
     } catch (e) {}
