@@ -308,14 +308,13 @@ if (ops.instance) {
       if (err) throw new Error(err)
       logger.info('New address generated', res.address, 'at position: ' + res.account_position)
       oraclizeConfiguration.account = res.account_position
-      deployOraclize()
+      startUpLog(true)
     })
   } else if (ops.new && !ops.broadcast) throw new Error('--new flag requires --broadcast mode')
-  else deployOraclize()
+  else startUpLog(true)
 } else {
   if (ops.new) throw new Error('cannot generate a new address if contracts are already deployed, please remove the --new flag')
-  startUpLog()
-  oracleFromConfig(oraclizeConfiguration)
+  startUpLog(false, oraclizeConfiguration)
 }
 
 function toFullPath (filePath) {
@@ -324,6 +323,11 @@ function toFullPath (filePath) {
 
 function oracleFromConfig (config) {
   try {
+    if (pricingInfo.length > 0 && basePrice > 0) {
+      config.onchain_config = {}
+      config.onchain_config.pricing = pricingInfo
+      config.onchain_config.base_price = basePrice
+    }
     activeOracleInstance = new OracleInstance(config)
     checkNodeConnection()
     activeOracleInstance.isValidOracleInstance()
@@ -415,17 +419,19 @@ function loadConfigFile (file) {
     oraclizeConfiguration = configFile
     mode = configFile.mode
     defaultnode = configFile.node.main
-    startUpLog()
-    setTimeout(function () {
-      oracleFromConfig(configFile)
-    }, 200)
+    startUpLog(false, configFile)
   } else return logger.error(file + ' configuration is not valid')
 }
 
-function startUpLog () {
+function startUpLog (newInstance, configFile) {
   logger.info('using', mode, 'mode')
   logger.info('Connecting to ' + BLOCKCHAIN_ABBRV + ' node ' + defaultnode)
-  checkBridgeVersion()
+  checkBridgeVersion(function (err, res) {
+    if (newInstance === true) deployOraclize()
+    else if (newInstance === false && typeof configFile !== 'undefined') {
+      oracleFromConfig(configFile)
+    } else throw new Error('failed to deploy/load oracle')
+  })
 }
 
 function userWarning () {
@@ -453,7 +459,7 @@ function nodeError () {
   throw new Error(defaultnode + ' ' + BLOCKCHAIN_NAME + ' node not found, are you sure is it running?\n ' + startString)
 }
 
-function checkBridgeVersion () {
+function checkBridgeVersion (callback) {
   request.get('https://api.oraclize.it/v1/platform/info', {json: true, headers: { 'X-User-Agent': BRIDGE_NAME + '/' + BRIDGE_VERSION + ' (nodejs)' }}, function (error, response, body) {
     if (error) return
     try {
@@ -471,18 +477,26 @@ function checkBridgeVersion () {
             var thisDatasource = datasources[i]
             for (var j = 0; j < thisDatasource.proof_types.length; j++) {
               var units = thisDatasource.units + proofPricing[thisDatasource.proof_types[j]].units
-              pricingInfo.push({"name": thisDatasource.name, "proof": thisDatasource.proof_types[j], "units": units})
+              pricingInfo.push({'name': thisDatasource.name, 'proof': thisDatasource.proof_types[j], 'units': units})
+              pricingInfo.push({'name': thisDatasource.name, 'proof': thisDatasource.proof_types[j] + 1, 'units': units})
             }
           }
+          callback(null, true)
         }
       }
-    } catch (e) {}
+    } catch (e) {
+      callback(e, null)
+    }
   })
 }
 
 function deployOraclize () {
-  startUpLog()
   try {
+    if (pricingInfo.length > 0 && basePrice > 0) {
+      oraclizeConfiguration.onchain_config = {}
+      oraclizeConfiguration.onchain_config.pricing = pricingInfo
+      oraclizeConfiguration.onchain_config.base_price = basePrice
+    }
     activeOracleInstance = new OracleInstance(oraclizeConfiguration)
     checkNodeConnection()
     userWarning()
