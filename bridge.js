@@ -15,6 +15,8 @@ var async = require('async')
 var fs = require('fs')
 var cbor = require('cbor')
 var path = require('path')
+var asyncLoop = require('node-async-loop')
+
 var OracleInstance = bridgeCore.OracleInstance
 var activeOracleInstance
 
@@ -107,6 +109,8 @@ var latestBlockNumber = -1
 var isTestRpc = false
 var reorgInterval = []
 var blockRangeResume = []
+var pricingInfo = []
+var basePrice = 0 // in ETH
 
 var ops = stdio.getopt({
   'instance': {args: 1, description: 'filename of the oracle configuration file that can be found in ./config/instance/ (i.e. oracle_instance_148375903.json)'},
@@ -127,6 +131,9 @@ var ops = stdio.getopt({
   'abiconn': {args: 1, description: 'Load custom connector abi interface (path)'},
   'abioar': {args: 1, description: 'Load custom oar abi interface (path)'},
   'newconn': {description: 'Generate and update the OAR with the new connector address'},
+  'update-ds': {description: 'Update datasource price (pricing is taken from the oracle instance configuration file)'},
+  'update-price': {description: 'Update base price (pricing is taken from the oracle instance configuration file)'},
+  'remote-price': {description: 'Use the remote API to get the pricing info'},
   // 'changeconn': {args:1, description: 'Provide a connector address and update the OAR with the new connector address'},
   'loadabi': {description: 'Load default abi interface (under ' + BRIDGE_NAME + '/contracts/abi)'},
   'from': {args: 1, description: 'fromBlock (number) to resume logs (--to is required)'},
@@ -306,14 +313,13 @@ if (ops.instance) {
       if (err) throw new Error(err)
       logger.info('New address generated', res.address, 'at position: ' + res.account_position)
       oraclizeConfiguration.account = res.account_position
-      deployOraclize()
+      startUpLog(true)
     })
   } else if (ops.new && !ops.broadcast) throw new Error('--new flag requires --broadcast mode')
-  else deployOraclize()
+  else startUpLog(true)
 } else {
   if (ops.new) throw new Error('cannot generate a new address if contracts are already deployed, please remove the --new flag')
-  startUpLog()
-  oracleFromConfig(oraclizeConfiguration)
+  startUpLog(false, oraclizeConfiguration)
 }
 
 function toFullPath (filePath) {
@@ -322,6 +328,11 @@ function toFullPath (filePath) {
 
 function oracleFromConfig (config) {
   try {
+    if ((pricingInfo.length > 0 && basePrice > 0 && typeof config.onchain_config === 'undefined') || ops['remote-price'] === true) {
+      config.onchain_config = {}
+      config.onchain_config.pricing = pricingInfo
+      config.onchain_config.base_price = basePrice
+    }
     activeOracleInstance = new OracleInstance(config)
     checkNodeConnection()
     activeOracleInstance.isValidOracleInstance()
@@ -329,6 +340,33 @@ function oracleFromConfig (config) {
     logger.info('OAR found:', activeOracleInstance.oar)
     logger.info('connector found:', activeOracleInstance.connector)
     logger.info('callback address:', activeOracleInstance.account)
+
+    if (ops['update-ds'] === true) {
+      asyncLoop(config.onchain_config.pricing, function(thisPrice, next) {
+        logger.info('updating datasource', thisPrice)
+        activeOracleInstance.addDSource(activeOracleInstance.connector, thisPrice, function(err,res) {
+          if (err) next(err)
+          else next(null)
+        })
+      }, function(err) {
+        if (err) logger.error('addDSource error',err)
+        else logger.info('addDSource correctly updated')
+        if (ops['update-price'] === true) {
+          activeOracleInstance.setBasePrice(activeOracleInstance.connector, config.onchain_config.base_price, function (err, res) {
+            if (err) return logger.error('update price error', err)
+            else logger.info('base price updated to', config.onchain_config.base_price, BLOCKCHAIN_BASE_UNIT)
+          })
+        }
+      })
+    }
+
+    if (ops['update-price'] === true && ops['update-ds'] !== true) {
+      activeOracleInstance.setBasePrice(activeOracleInstance.connector, config.onchain_config.base_price, function (err, res) {
+        if (err) return logger.error('update price error', err)
+        else logger.info('base price updated to', config.onchain_config.base_price, BLOCKCHAIN_BASE_UNIT)
+      })
+    }
+
     if (!ops.newconn) runLog()
     else {
       var rl = readline.createInterface({
@@ -336,7 +374,7 @@ function oracleFromConfig (config) {
         output: process.stdout
       })
       rl.question('Are you sure you want to generate a new connector and update the Address Resolver? [Y/n]: ', function (answ) {
-        var answ = answ.toLowerCase()
+        answ = answ.toLowerCase()
         if (answ.match(/y/)) {
           rl.close()
           console.log('Please wait...')
@@ -394,7 +432,7 @@ function processPendingQueries (oar, connector, cbAddress) {
             var targetDate = new Date(targetUnix * 1000)
             processQueryInFuture(targetDate, thisPendingQuery)
           }
-          callback()
+          callback(null)
         } else logger.warn('skipping', thisPendingQuery.contract_myid, 'query, exceeded 3 retries')
       })
     }
@@ -413,17 +451,19 @@ function loadConfigFile (file) {
     oraclizeConfiguration = configFile
     mode = configFile.mode
     defaultnode = configFile.node.main
-    startUpLog()
-    setTimeout(function () {
-      oracleFromConfig(configFile)
-    }, 200)
+    startUpLog(false, configFile)
   } else return logger.error(file + ' configuration is not valid')
 }
 
-function startUpLog () {
+function startUpLog (newInstance, configFile) {
   logger.info('using', mode, 'mode')
   logger.info('Connecting to ' + BLOCKCHAIN_ABBRV + ' node ' + defaultnode)
-  checkBridgeVersion()
+  checkBridgeVersion(function (err, res) {
+    if (newInstance === true) deployOraclize()
+    else if (newInstance === false && typeof configFile !== 'undefined') {
+      oracleFromConfig(configFile)
+    } else throw new Error('failed to deploy/load oracle')
+  })
 }
 
 function userWarning () {
@@ -451,7 +491,7 @@ function nodeError () {
   throw new Error(defaultnode + ' ' + BLOCKCHAIN_NAME + ' node not found, are you sure is it running?\n ' + startString)
 }
 
-function checkBridgeVersion () {
+function checkBridgeVersion (callback) {
   request.get('https://api.oraclize.it/v1/platform/info', {json: true, headers: { 'X-User-Agent': BRIDGE_NAME + '/' + BRIDGE_VERSION + ' (nodejs)' }}, function (error, response, body) {
     if (error) return
     try {
@@ -461,14 +501,34 @@ function checkBridgeVersion () {
         if (versionCompare(BRIDGE_VERSION, latestVersion) === -1) {
           logger.warn('\n************************************************************************\nA NEW VERSION OF THIS TOOL HAS BEEN DETECTED\nIT IS HIGHLY RECOMMENDED THAT YOU ALWAYS RUN THE LATEST VERSION, PLEASE UPGRADE TO ' + BRIDGE_NAME.toUpperCase() + ' ' + latestVersion + '\n************************************************************************\n')
         }
+        if (typeof body.result.pricing !== 'undefined' && typeof body.result.quotes !== 'undefined') {
+          var datasources = body.result.pricing.datasources
+          var proofPricing = body.result.pricing.proofs
+          basePrice = body.result.quotes.ETH
+          for (var i = 0; i < datasources.length; i++) {
+            var thisDatasource = datasources[i]
+            for (var j = 0; j < thisDatasource.proof_types.length; j++) {
+              var units = thisDatasource.units + proofPricing[thisDatasource.proof_types[j]].units
+              pricingInfo.push({'name': thisDatasource.name, 'proof': thisDatasource.proof_types[j], 'units': units})
+              pricingInfo.push({'name': thisDatasource.name, 'proof': thisDatasource.proof_types[j] + 1, 'units': units})
+            }
+          }
+          callback(null, true)
+        }
       }
-    } catch (e) {}
+    } catch (e) {
+      callback(e, null)
+    }
   })
 }
 
 function deployOraclize () {
-  startUpLog()
   try {
+    if (pricingInfo.length > 0 && basePrice > 0) {
+      oraclizeConfiguration.onchain_config = {}
+      oraclizeConfiguration.onchain_config.pricing = pricingInfo
+      oraclizeConfiguration.onchain_config.base_price = basePrice
+    }
     activeOracleInstance = new OracleInstance(oraclizeConfiguration)
     checkNodeConnection()
     userWarning()
@@ -533,10 +593,12 @@ function deployOraclize () {
       } else callback(null, true)
     },
     function deployConnector (result, callback) {
+      logger.info('deploying the oraclize connector contract...')
       activeOracleInstance.deployConnector(callback)
     },
     function deployOAR (result, callback) {
       logger.info('connector deployed to:', result.connector)
+      logger.info('deploying the address resolver contract...')
       activeOracleInstance.deployOAR(callback)
     }
   ], function (err, result) {
@@ -725,7 +787,7 @@ function fetchLogs () {
 function parseMultipleLogs (data) {
   async.each(data, function (log, callback) {
     manageLog(log)
-    callback()
+    callback(null)
   })
 }
 
@@ -860,6 +922,7 @@ function checkQueryStatus (myid, myIdInitial, contractAddress, proofType, gasLim
     if (callbackRunning === true) return
     queryStatus(myid, function (data) {
       logger.info(myid, 'HTTP query result: ', data)
+      if (typeof data.result.active === 'undefined' || typeof data.result.bridge_request_error !== 'undefined') return
       if (data.result.active === true) return
       var dataProof = null
       if (checkErrors(data) === true) {
@@ -917,6 +980,7 @@ function queryComplete (gasLimit, myid, result, proof, contractAddr, proofType) 
       if (findErr !== null) return queryCompleteErrors(findErr)
       if (alreadyCalled === true) return queryCompleteErrors('queryComplete error, __callback for contract myid', myid, 'was already called before, skipping...')
       var callbackData = bridgeUtil.callbackTxEncode(myid, result, proof, proofType)
+      logger.info('sending __callback tx...')
       activeOracleInstance.sendTx({'from': activeOracleInstance.account, 'to': bridgeCore.ethUtil.addHexPrefix(contractAddr), 'gas': gasLimit, 'data': callbackData}, function (err, contract) {
         var callbackObj = {'myid': myid, 'result': result, 'proof': proof}
         if (err) {
@@ -1029,7 +1093,7 @@ function queryStatus (queryId, callback) {
   request.get('https://api.oraclize.it/v1/query/' + queryId + '/status', {json: true, headers: { 'X-User-Agent': BRIDGE_NAME + '/' + BRIDGE_VERSION + ' (nodejs)' }}, function (error, response, body) {
     if (error) {
       logger.error('HTTP query status request error ', error)
-      callback({'result': {}})
+      callback({'result': {}, 'bridge_request_error': true})
     } else {
       if (response.statusCode === 200) {
         callback(body)
@@ -1044,6 +1108,7 @@ function checkErrors (data) {
       logger.error('no result')
       return false
     } else if ('checks' in data.result) {
+      if (data.result.checks.length === 0) return true
       var lastCheck = data.result.checks[data.result.checks.length - 1]
       if (typeof lastCheck['errors'][0] !== 'undefined') {
         logger.error('HTTP query error', lastCheck.errors)
