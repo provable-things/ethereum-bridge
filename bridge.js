@@ -915,6 +915,7 @@ function checkQueryStatus (myid, myIdInitial, contractAddress, proofType, gasLim
     if (callbackRunning === true) return
     queryStatus(myid, function (data) {
       logger.info(myid, 'HTTP query result: ', data)
+      if (typeof data.result.active === 'undefined' || typeof data.result.bridge_request_error !== 'undefined') return
       if (data.result.active === true) return
       var dataProof = null
       if (checkErrors(data) === true) {
@@ -972,6 +973,7 @@ function queryComplete (gasLimit, myid, result, proof, contractAddr, proofType) 
       if (findErr !== null) return queryCompleteErrors(findErr)
       if (alreadyCalled === true) return queryCompleteErrors('queryComplete error, __callback for contract myid', myid, 'was already called before, skipping...')
       var callbackData = bridgeUtil.callbackTxEncode(myid, result, proof, proofType)
+      logger.info('sending __callback tx...')
       activeOracleInstance.sendTx({'from': activeOracleInstance.account, 'to': bridgeCore.ethUtil.addHexPrefix(contractAddr), 'gas': gasLimit, 'data': callbackData}, function (err, contract) {
         var callbackObj = {'myid': myid, 'result': result, 'proof': proof}
         if (err) {
@@ -1084,7 +1086,7 @@ function queryStatus (queryId, callback) {
   request.get('https://api.oraclize.it/v1/query/' + queryId + '/status', {json: true, headers: { 'X-User-Agent': BRIDGE_NAME + '/' + BRIDGE_VERSION + ' (nodejs)' }}, function (error, response, body) {
     if (error) {
       logger.error('HTTP query status request error ', error)
-      callback({'result': {}})
+      callback({'result': {}, 'bridge_request_error': true})
     } else {
       if (response.statusCode === 200) {
         callback(body)
@@ -1099,6 +1101,7 @@ function checkErrors (data) {
       logger.error('no result')
       return false
     } else if ('checks' in data.result) {
+      if (data.result.checks.length === 0) return true
       var lastCheck = data.result.checks[data.result.checks.length - 1]
       if (typeof lastCheck['errors'][0] !== 'undefined') {
         logger.error('HTTP query error', lastCheck.errors)
