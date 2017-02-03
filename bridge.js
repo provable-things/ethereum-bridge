@@ -15,6 +15,8 @@ var async = require('async')
 var fs = require('fs')
 var cbor = require('cbor')
 var path = require('path')
+var asyncLoop = require('node-async-loop')
+
 var OracleInstance = bridgeCore.OracleInstance
 var activeOracleInstance
 
@@ -340,22 +342,25 @@ function oracleFromConfig (config) {
     logger.info('callback address:', activeOracleInstance.account)
 
     if (ops['update-ds'] === true) {
-      async.each(config.onchain_config.pricing, function (thisPrice, next) {
+      asyncLoop(config.onchain_config.pricing, function(thisPrice, next) {
         logger.info('updating datasource', thisPrice)
-        activeOracleInstance.addDSource(activeOracleInstance.connector, thisPrice, function(err, res) {
-          if (err) {
-            logger.error('failed to update',thisPrice,'error',err)
-            return next(err)
-          }
-          next(null)
+        activeOracleInstance.addDSource(activeOracleInstance.connector, thisPrice, function(err,res) {
+          if (err) next(err)
+          else next(null)
         })
       }, function(err) {
-        if (err) logger.error('updating datasource error', err)
-        else logger.info('updating datasource done')
+        if (err) logger.error('addDSource error',err)
+        else logger.info('addDSource correctly updated')
+        if (ops['update-price'] === true) {
+          activeOracleInstance.setBasePrice(activeOracleInstance.connector, config.onchain_config.base_price, function (err, res) {
+            if (err) return logger.error('update price error', err)
+            else logger.info('base price updated to', config.onchain_config.base_price, BLOCKCHAIN_BASE_UNIT)
+          })
+        }
       })
     }
 
-    if (ops['update-price'] === true) {
+    if (ops['update-price'] === true && ops['update-ds'] !== true) {
       activeOracleInstance.setBasePrice(activeOracleInstance.connector, config.onchain_config.base_price, function (err, res) {
         if (err) return logger.error('update price error', err)
         else logger.info('base price updated to', config.onchain_config.base_price, BLOCKCHAIN_BASE_UNIT)
@@ -588,10 +593,12 @@ function deployOraclize () {
       } else callback(null, true)
     },
     function deployConnector (result, callback) {
+      logger.info('deploying the oraclize connector contract...')
       activeOracleInstance.deployConnector(callback)
     },
     function deployOAR (result, callback) {
       logger.info('connector deployed to:', result.connector)
+      logger.info('deploying the address resolver contract...')
       activeOracleInstance.deployOAR(callback)
     }
   ], function (err, result) {

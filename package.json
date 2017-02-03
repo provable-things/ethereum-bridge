@@ -16,6 +16,7 @@
     "ethereumjs-util": "5.0.1",
     "i18n": "0.8.3",
     "multihashes": "0.3.1",
+    "node-async-loop": "^1.2.2",
     "node-schedule": "^1.2.0",
     "request": "^2.78.0",
     "stdio": "0.2.7",
