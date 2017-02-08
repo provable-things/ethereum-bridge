@@ -962,7 +962,7 @@ function getProof (proofContent, proofType) {
     return new Buffer('')
   } else if (typeof proofContent === 'object') {
     if (typeof proofContent.type !== 'undefined' && typeof proofContent.value !== 'undefined') {
-      return new Buffer(proofContent.value)
+      return Buffer.from(proofContent.value, 'hex')
     }
   } else return proofContent
 }
