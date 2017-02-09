@@ -342,21 +342,16 @@ function oracleFromConfig (config) {
     logger.info('callback address:', activeOracleInstance.account)
 
     if (ops['update-ds'] === true) {
-      asyncLoop(config.onchain_config.pricing, function(thisPrice, next) {
-        logger.info('updating datasource', thisPrice)
-        activeOracleInstance.addDSource(activeOracleInstance.connector, thisPrice, function(err,res) {
-          if (err) next(err)
-          else next(null)
-        })
-      }, function(err) {
-        if (err) logger.error('addDSource error',err)
-        else logger.info('addDSource correctly updated')
-        if (ops['update-price'] === true) {
-          activeOracleInstance.setBasePrice(activeOracleInstance.connector, config.onchain_config.base_price, function (err, res) {
-            if (err) return logger.error('update price error', err)
-            else logger.info('base price updated to', config.onchain_config.base_price, BLOCKCHAIN_BASE_UNIT)
-          })
-        }
+        logger.info('updating datasource pricing...')
+        activeOracleInstance.multiAddDSource(activeOracleInstance.connector, config.onchain_config.pricing, function (err, res) {
+          if (err) logger.error('multiAddDSource error', err)
+          else logger.info('multiAddDSource correctly updated')
+          if (ops['update-price'] === true) {
+            activeOracleInstance.setBasePrice(activeOracleInstance.connector, config.onchain_config.base_price, function (err, res) {
+              if (err) return logger.error('update price error', err)
+              else logger.info('base price updated to', config.onchain_config.base_price, BLOCKCHAIN_BASE_UNIT)
+            })
+          }
       })
     }
 
