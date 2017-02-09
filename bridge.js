@@ -781,8 +781,9 @@ function fetchLogs () {
   }
 }
 
-function parseMultipleLogs (data) {
-  asyncLoop(data, function (log, next) {
+function parseMultipleLogs (logsArray) {
+  if (typeof logsArray === 'undefined' || logsArray.length === 0) return
+  asyncLoop(logsArray, function (log, next) {
     manageLog(log)
     next(null)
   }, function (err) {
