@@ -342,16 +342,16 @@ function oracleFromConfig (config) {
     logger.info('callback address:', activeOracleInstance.account)
 
     if (ops['update-ds'] === true) {
-        logger.info('updating datasource pricing...')
-        activeOracleInstance.multiAddDSource(activeOracleInstance.connector, config.onchain_config.pricing, function (err, res) {
-          if (err) logger.error('multiAddDSource error', err)
-          else logger.info('multiAddDSource correctly updated')
-          if (ops['update-price'] === true) {
-            activeOracleInstance.setBasePrice(activeOracleInstance.connector, config.onchain_config.base_price, function (err, res) {
-              if (err) return logger.error('update price error', err)
-              else logger.info('base price updated to', config.onchain_config.base_price, BLOCKCHAIN_BASE_UNIT)
-            })
-          }
+      logger.info('updating datasource pricing...')
+      activeOracleInstance.multiAddDSource(activeOracleInstance.connector, config.onchain_config.pricing, function (err, res) {
+        if (err) logger.error('multiAddDSource error', err)
+        else logger.info('multiAddDSource correctly updated')
+        if (ops['update-price'] === true) {
+          activeOracleInstance.setBasePrice(activeOracleInstance.connector, config.onchain_config.base_price, function (err, res) {
+            if (err) return logger.error('update price error', err)
+            else logger.info('base price updated to', config.onchain_config.base_price, BLOCKCHAIN_BASE_UNIT)
+          })
+        }
       })
     }
 
@@ -415,7 +415,7 @@ function processPendingQueries (oar, connector, cbAddress) {
       } else if (resumeQueries === true) {
         logger.warn('forcing the resume of all pending queries')
       }
-      async.each(pendingQueries, function (thisPendingQuery, callback) {
+      asyncLoop(pendingQueries, function (thisPendingQuery, next) {
         if (thisPendingQuery.callback_error === true) logger.warn('skipping', thisPendingQuery.contract_myid, 'because of __callback tx error')
         else if (thisPendingQuery.retry_number < 3 || resumeQueries) {
           var targetUnix = parseInt(thisPendingQuery.target_timestamp)
@@ -427,8 +427,10 @@ function processPendingQueries (oar, connector, cbAddress) {
             var targetDate = new Date(targetUnix * 1000)
             processQueryInFuture(targetDate, thisPendingQuery)
           }
-          callback(null)
+          next(null)
         } else logger.warn('skipping', thisPendingQuery.contract_myid, 'query, exceeded 3 retries')
+      }, function (err) {
+        if (err) logger.error('Pending query error', err)
       })
     }
   })
@@ -780,9 +782,11 @@ function fetchLogs () {
 }
 
 function parseMultipleLogs (data) {
-  async.each(data, function (log, callback) {
+  asyncLoop(data, function (log, next) {
     manageLog(log)
-    callback(null)
+    next(null)
+  }, function (err) {
+    if (err) logger.error('Multiple logs error', err)
   })
 }
 
