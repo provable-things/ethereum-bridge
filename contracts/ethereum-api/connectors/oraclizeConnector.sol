@@ -1,6 +1,6 @@
 /*
 Copyright (c) 2015-2016 Oraclize SRL
-Copyright (c) 2016 Oraclize LTD
+Copyright (c) 2016-2017 Oraclize LTD
 */
 
 pragma solidity ^0.4.6;
@@ -9,13 +9,12 @@ contract AmIOnTheFork{
     function forked() constant returns(bool);
 }
 
-
 contract Oraclize {
     mapping (address => uint) reqc;
 
-    address public cbAddress = 0x26588a9301b0428d95e6fc3a5024fce8bec12d51;
+    address public cbAddress = 0x26588a9301b0428d95e6Fc3A5024fcE8BEc12D51;
 
-    address constant AmIOnTheForkAddress = 0x2bd2326c993dfaef84f696526064ff22eba5b362;
+    address constant AmIOnTheForkAddress = 0x2BD2326c993DFaeF84f696526064FF22eba5b362;
 
     event Log1(address sender, bytes32 cid, uint timestamp, string datasource, string arg, uint gaslimit, byte proofType, uint gasPrice);
     event Log2(address sender, bytes32 cid, uint timestamp, string datasource, string arg1, string arg2, uint gaslimit, byte proofType, uint gasPrice);
@@ -41,6 +40,14 @@ contract Oraclize {
         bytes32 dsname_hash = sha3(dsname, proofType);
         dsources[dsources.length++] = dsname_hash;
         price_multiplier[dsname_hash] = multiplier;
+    }
+
+    function multiAddDSource(bytes32[] dsHash, uint256[] multiplier) onlyadmin {
+        // dsHash -> sha3(DATASOURCE_NAME, PROOF_TYPE); 
+        for (uint i=0; i<dsHash.length; i++) {
+            dsources[dsources.length++] = dsHash[i];
+            price_multiplier[dsHash[i]] = multiplier[i];
+        }
     }
 
     mapping (bytes32 => bool) coupons;

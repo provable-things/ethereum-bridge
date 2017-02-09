@@ -2,7 +2,7 @@
 
 ###oraclizeConnector.binary
 
-Compiler version: 0.4.6-2dabbdf0
+Compiler version: 0.4.9-364da425
 
 Optimization: Enabled
 
