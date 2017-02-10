@@ -6,6 +6,8 @@ _Please note that at this point this tool is still **experimental** and subject 
 ###Requirements
 - node version **>= 5.0.0 < 7.0.0** (& npm)
 
+Suggested version: node 6.9.1
+
 ####Note
 (on Ubuntu)
 
@@ -16,7 +18,6 @@ run `sudo apt-get install build-essential -y`
 npm install
 ```
 
-Suggested version: node 6.9.1
 
 ###How to use
 
@@ -93,3 +94,7 @@ contract test() {
   * `--resume` : resume all skipped queries
   * `--skip` : skip all pending queries
   * `--dev` : skip contract myid check and pending queries (useful for local testing)
+  * `--disable-price` : skip datasource pricing and base price connector update
+  * `--update-ds` : update datasource pricing only (pricing (if found) will be loaded from your local instance file, otherwise will be fetched from the remote oraclize API)
+  * `--update-price` : update base price only (base price (if found) will be loaded from your local instance file, otherwise will be fetched from the remote oraclize API)
+  * `--remote-price` : force the remote pricing fetch

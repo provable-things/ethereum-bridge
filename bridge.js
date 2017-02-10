@@ -134,6 +134,7 @@ var ops = stdio.getopt({
   'update-ds': {description: 'Update datasource price (pricing is taken from the oracle instance configuration file)'},
   'update-price': {description: 'Update base price (pricing is taken from the oracle instance configuration file)'},
   'remote-price': {description: 'Use the remote API to get the pricing info'},
+  'disable-price': {description: 'Disable pricing'},
   // 'changeconn': {args:1, description: 'Provide a connector address and update the OAR with the new connector address'},
   'loadabi': {description: 'Load default abi interface (under ' + BRIDGE_NAME + '/contracts/abi)'},
   'from': {args: 1, description: 'fromBlock (number) to resume logs (--to is required)'},
@@ -597,6 +598,15 @@ function deployOraclize () {
       logger.info('connector deployed to:', result.connector)
       logger.info('deploying the address resolver contract...')
       activeOracleInstance.deployOAR(callback)
+    },
+    function setPricing (result, callback) {
+      if (ops['disable-price'] === true) {
+        logger.warn('skipping pricing update...')
+        callback(null, result.oar)
+      } else {
+        logger.info('updating pricing...')
+        activeOracleInstance.setPricing(activeOracleInstance.connector, result.oar, callback)
+      }
     }
   ], function (err, result) {
     if (err) throw new Error(err)
