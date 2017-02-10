@@ -640,7 +640,7 @@ function checkVersion () {
 }
 
 function runLog () {
-  console.log('\nPlease add this line to your contract constructor:\n\n' + 'OAR = OraclizeAddrResolverI(' + activeOracleInstance.oar + ');\n')
+  console.log('\nPlease add this line to your contract constructor:\n\n' + 'OAR = OraclizeAddrResolverI(' + bridgeCore.ethUtil.toChecksumAddress(activeOracleInstance.oar) + ');\n')
 
   // listen for latest events
   fetchLogs()
