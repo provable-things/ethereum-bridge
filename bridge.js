@@ -428,8 +428,10 @@ function processPendingQueries (oar, connector, cbAddress) {
             var targetDate = new Date(targetUnix * 1000)
             processQueryInFuture(targetDate, thisPendingQuery)
           }
-          next(null)
         } else logger.warn('skipping', thisPendingQuery.contract_myid, 'query, exceeded 3 retries')
+        setTimeout(function () {
+          next(null)
+        }, 1001)
       }, function (err) {
         if (err) logger.error('Pending query error', err)
       })
