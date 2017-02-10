@@ -160,7 +160,7 @@ var logger = new (winston.Logger)({
     new (winston.transports.Console)({
       colorize: true,
       timestamp: function () {
-        return Date.now()
+        return new Date().toISOString()
       },
       formatter: function (options) {
         return '[' + colors.grey(options.timestamp()) + '] ' + colorize(options.level.toUpperCase()) + ' ' + (options.message ? options.message : '') +
@@ -373,6 +373,7 @@ function oracleFromConfig (config) {
         answ = answ.toLowerCase()
         if (answ.match(/y/)) {
           rl.close()
+          console.log('Please wait...')
           activeOracleInstance.deployConnector(function (err, connectorRes) {
             if (err) throw new Error(err)
             if (connectorRes.success === true) {
