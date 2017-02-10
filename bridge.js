@@ -373,7 +373,6 @@ function oracleFromConfig (config) {
         answ = answ.toLowerCase()
         if (answ.match(/y/)) {
           rl.close()
-          console.log('Please wait...')
           activeOracleInstance.deployConnector(function (err, connectorRes) {
             if (err) throw new Error(err)
             if (connectorRes.success === true) {
@@ -470,6 +469,11 @@ function userWarning () {
 
 function checkNodeConnection () {
   if (!activeOracleInstance.isConnected()) nodeError()
+  else {
+    var nodeType = bridgeCore.web3.version.node
+    isTestRpc = nodeType.match(/TestRPC/) ? true : false
+    logger.info('connected to node type', nodeType)
+  }
 }
 
 function getHostAndPort (nodeHttp) {
@@ -600,19 +604,19 @@ function deployOraclize () {
       activeOracleInstance.deployOAR(callback)
     },
     function setPricing (result, callback) {
+      oraclizeConfiguration.oar = result.oar
       if (ops['disable-price'] === true) {
         logger.warn('skipping pricing update...')
-        callback(null, result.oar)
+        callback(null, null)
       } else {
         logger.info('updating pricing...')
-        activeOracleInstance.setPricing(activeOracleInstance.connector, result.oar, callback)
+        activeOracleInstance.setPricing(activeOracleInstance.connector, callback)
       }
     }
   ], function (err, result) {
     if (err) throw new Error(err)
-    logger.info('address resolver (OAR) deployed to:', result.oar)
+    logger.info('address resolver (OAR) deployed to:', oraclizeConfiguration.oar)
     logger.info('successfully deployed all contracts')
-    oraclizeConfiguration.oar = result.oar
     oraclizeConfiguration.connector = activeOracleInstance.connector
     oraclizeConfiguration.account = activeOracleInstance.account
     configFilePath = toFullPath('./config/instance/oracle_instance_' + parseInt(Date.now() / 1000) + '.json')
@@ -645,13 +649,7 @@ function runLog () {
   // listen for latest events
   fetchLogs()
 
-  var nodeType = bridgeCore.web3.version.node
-
-  isTestRpc = nodeType.match(/TestRPC/) ? true : false
-
-  logger.info('connected to node type', nodeType)
-
-  if (isTestRpc) logger.warn('re-org block listen is disabled when using testrpc')
+  if (isTestRpc || ops.dev) logger.warn('re-org block listen is disabled')
   else reorgListen()
 
   logger.info('Listening @ ' + activeOracleInstance.connector + ' (Oraclize Connector)\n')
