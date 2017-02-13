@@ -885,7 +885,7 @@ function handleLog (data) {
       proof_type: bridgeUtil.toInt(proofType)
     }
     createQuery(query, function (data) {
-      if (typeof data.result.id === 'undefined') return logger.error('no HTTP myid found, skipping log...')
+      if (typeof data !== 'object' || typeof data.result === 'undefined' || typeof data.result.id === 'undefined') return logger.error('no HTTP myid found, skipping log...')
       myid = data.result.id
       logger.info('new HTTP query created, id: ' + myid)
       var unixTime = parseInt(Date.now() / 1000)
@@ -933,6 +933,10 @@ function checkQueryStatus (myid, myIdInitial, contractAddress, proofType, gasLim
     if (callbackRunning === true) return
     queryStatus(myid, function (data) {
       logger.info(myid, 'HTTP query result: ', data)
+      if (typeof data !== 'object' || typeof data.result === 'undefined') {
+        clearInterval(interval)
+        return logger.error('HTTP query status error')
+      }
       if (typeof data.result.active === 'undefined' || typeof data.result.bridge_request_error !== 'undefined') return
       if (data.result.active === true) return
       var dataProof = null
