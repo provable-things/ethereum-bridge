@@ -94,6 +94,7 @@ contract test() {
   * `--resume` : resume all skipped queries
   * `--skip` : skip all pending queries
   * `--dev` : skip contract myid check and pending queries (useful for local testing)
+  * `--disable-deterministic-oar` : Deploy the address resolver (OAR) with your main account (note: you need to update your contract with the new generated address)
   * `--disable-price` : skip datasource pricing and base price connector update
   * `--update-ds` : update datasource pricing only (pricing (if found) will be loaded from your local instance file, otherwise will be fetched from the remote oraclize API)
   * `--update-price` : update base price only (base price (if found) will be loaded from your local instance file, otherwise will be fetched from the remote oraclize API)
