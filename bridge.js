@@ -131,6 +131,7 @@ var ops = stdio.getopt({
   'abiconn': {args: 1, description: 'Load custom connector abi interface (path)'},
   'abioar': {args: 1, description: 'Load custom oar abi interface (path)'},
   'newconn': {description: 'Generate and update the OAR with the new connector address'},
+  'disable-deterministic-oar': {description: 'Disable deterministic oar'},
   'update-ds': {description: 'Update datasource price (pricing is taken from the oracle instance configuration file)'},
   'update-price': {description: 'Update base price (pricing is taken from the oracle instance configuration file)'},
   'remote-price': {description: 'Use the remote API to get the pricing info'},
@@ -255,6 +256,11 @@ if (ops.broadcast) {
 
 logger.info('saving logs to:', logFilePath)
 
+var deterministicOar = true
+if (ops['disable-deterministic-oar']) {
+  deterministicOar = false
+}
+
 var oraclizeConfiguration = {
   'oar': ops.oar,
   'node': {
@@ -273,6 +279,7 @@ var oraclizeConfiguration = {
       'source': toFullPath('./contracts/ethereum-api/connectors/addressResolver.sol')
     }
   },
+  'deterministic_oar': deterministicOar,
   'deploy_gas': defaultGas,
   'account': ops.address,
   'mode': mode,
@@ -1000,7 +1007,7 @@ function queryComplete (gasLimit, myid, result, proof, contractAddr, proofType) 
       if (findErr !== null) return queryCompleteErrors(findErr)
       if (alreadyCalled === true) return queryCompleteErrors('queryComplete error, __callback for contract myid', myid, 'was already called before, skipping...')
       var callbackData = bridgeUtil.callbackTxEncode(myid, result, proof, proofType)
-      logger.info('sending __callback tx...', {"contract_myid": myid, "contract_address": contractAddr})
+      logger.info('sending __callback tx...', {'contract_myid': myid, 'contract_address': contractAddr})
       activeOracleInstance.sendTx({'from': activeOracleInstance.account, 'to': bridgeCore.ethUtil.addHexPrefix(contractAddr), 'gas': gasLimit, 'data': callbackData}, function (err, contract) {
         var callbackObj = {'myid': myid, 'result': result, 'proof': proof}
         if (err) {
