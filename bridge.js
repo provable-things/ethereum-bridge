@@ -615,7 +615,11 @@ function deployOraclize () {
     },
     function deployOAR (result, callback) {
       logger.info('connector deployed to:', result.connector)
-      logger.info('deploying the address resolver contract...')
+      if (deterministicOar === true && bridgeCore.getAccountNonce(bridgeCore.getTempAccount()) === 0) logger.info('deploying the address resolver with a deterministic address...')
+      else {
+        logger.warn('deterministic OAR disabled/not available, please update your contract with the new custom address generated')
+        logger.info('deploying the address resolver contract...')
+      }
       activeOracleInstance.deployOAR(callback)
     },
     function setPricing (result, callback) {
