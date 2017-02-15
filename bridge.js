@@ -118,7 +118,7 @@ var ops = stdio.getopt({
   'url': {key: 'u', args: 1, description: BLOCKCHAIN_ABBRV + ' node URL (default: http://' + defaultnode + ')'},
   'HOST': {key: 'H', args: 1, description: BLOCKCHAIN_ABBRV + ' node IP:PORT (default: ' + defaultnode + ')'},
   'port': {key: 'p', args: 1, description: BLOCKCHAIN_ABBRV + ' node localhost port (default: 8545)'},
-  'address': {key: 'a', args: 1, description: 'unlocked address used to deploy Oraclize connector and OAR'},
+  'account': {key: 'a', args: 1, description: 'unlocked account used to deploy Oraclize connector and OAR'},
   'broadcast': {description: 'broadcast only mode, a json key file with the private key is mandatory to sign all transactions'},
   'gas': {args: 1, description: 'change gas amount limit used to deploy contracts(in wei) (default: ' + defaultGas + ')'},
   'key': {args: 1, description: 'JSON key file path (default: ' + keyFilePath + ')'},
@@ -235,11 +235,11 @@ if (ops.broadcast) {
   try {
     var privateKeyContent = fs.readFileSync(keyFilePath)
     if (JSON.parse(privateKeyContent.toString()).length > 0) {
-      ops.address = 0
-    } else if (ops.address) {
+      if (!ops.account) ops.account = 0
+    } else if (ops.account) {
       ops.new = true
-      logger.error('no account', ops.address, 'found in your keys.json file, automatically removing the -a option...')
-      ops.address = null
+      logger.error('no account', ops.account, 'found in your keys.json file, automatically removing the -a option...')
+      ops.account = null
     }
   } catch (err) {
     if (err.code === 'ENOENT') {
@@ -281,7 +281,7 @@ var oraclizeConfiguration = {
   },
   'deterministic_oar': deterministicOar,
   'deploy_gas': defaultGas,
-  'account': ops.address,
+  'account': ops.account,
   'mode': mode,
   'key_file': keyFilePath
 }
@@ -315,7 +315,7 @@ if (ops.instance) {
     logger.error(instanceToLoad + ' not found in ./config/instance/')
   }
 } else if (!ops.oar) {
-  if (ops.new && ops.address) throw new Error("--new flag doesn't require the -a flag")
+  if (ops.new && ops.account) throw new Error("--new flag doesn't require the -a flag")
   if (ops.new && ops.broadcast) {
     bridgeUtil.generateNewAddress(keyFilePath, function (err, res) {
       if (err) throw new Error(err)
