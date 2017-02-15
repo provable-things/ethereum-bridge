@@ -27,6 +27,9 @@ You have 2 options:
 
 After you have correctly deployed the address resolver and the connector on your blockchain you can load the previous instance using the `--oar` flag (with the latest oar address generated) or using `--instance latest`
 
+
+**if you are not using the deterministic OAR** you also need to [update your contract constructor](#add-a-custom-address-resolver) with the new address resolver generated
+
 see also [optional flags](#optional-flags)
 
 ####Active mode
@@ -54,11 +57,11 @@ node bridge -H localhost:8545 --broadcast -a 0
 (load the first account in your keys.json file (index n.0) and deploy contracts (txs broadcasted to localhost:8545 node))
 
 
-**Follow the console message**
+####Add a custom address resolver
 
 Add `OAR = OraclizeAddrResolverI(EnterYourOarCustomAddress);` to your contract constructor, example:
 
-**Note:** You need to change `EnterYourOarCustomAddress` with the address that is generated when you run the script
+Where `EnterYourOarCustomAddress` is the address resolver generated when you have run the script
 ```
 contract test() {
     ...
@@ -72,7 +75,8 @@ contract test() {
 }
 ```
 
-**Note:** The address chosen will be used to deploy the Oraclize OAR and Connector, **make sure to not deploy contracts that use Oraclize on the same address.**
+
+**Note:** The address chosen will be used to deploy all the Oraclize contracts, **make sure to not deploy contracts that use Oraclize on the same address.**
 
 ###Optional flags
 

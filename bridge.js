@@ -663,7 +663,9 @@ function checkVersion () {
 }
 
 function runLog () {
-  console.log('\nPlease add this line to your contract constructor:\n\n' + 'OAR = OraclizeAddrResolverI(' + bridgeCore.ethUtil.toChecksumAddress(activeOracleInstance.oar) + ');\n')
+  var checksumOar = bridgeCore.ethUtil.toChecksumAddress(activeOracleInstance.oar)
+  if (checksumOar === '0x6f485C8BF6fc43eA212E93BBF8ce046C7f1cb475') logger.info('you are using a deterministic OAR, you don\'t need to update your contract')
+  else console.log('\nPlease add this line to your contract constructor:\n\n' + 'OAR = OraclizeAddrResolverI(' + checksumOar + ');\n')
 
   // listen for latest events
   fetchLogs()
