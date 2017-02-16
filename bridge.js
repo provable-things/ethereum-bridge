@@ -16,6 +16,7 @@ var fs = require('fs')
 var cbor = require('cbor')
 var path = require('path')
 var asyncLoop = require('node-async-loop')
+var moment = require('moment')
 
 var OracleInstance = bridgeCore.OracleInstance
 var activeOracleInstance
@@ -161,7 +162,7 @@ var logger = new (winston.Logger)({
     new (winston.transports.Console)({
       colorize: true,
       timestamp: function () {
-        return new Date().toISOString()
+        return moment().toISOString()
       },
       formatter: function (options) {
         return '[' + colors.grey(options.timestamp()) + '] ' + colorize(options.level.toUpperCase()) + ' ' + (options.message ? options.message : '') +
@@ -429,12 +430,12 @@ function processPendingQueries (oar, connector, cbAddress) {
           return next(null)
         } else if (thisPendingQuery.retry_number < 3 || resumeQueries) {
           var targetUnix = parseInt(thisPendingQuery.target_timestamp)
-          var queryTimeDiff = targetUnix < parseInt(Date.now() / 1000) ? 0 : targetUnix
+          var queryTimeDiff = targetUnix < moment().unix() ? 0 : targetUnix
           logger.info('re-processing query', {'contact_address:': thisPendingQuery.contact_address, 'contact_myid': thisPendingQuery.contract_myid, 'http_myid': thisPendingQuery.http_myid})
           if (queryTimeDiff <= 0) {
             checkQueryStatus(thisPendingQuery.http_myid, thisPendingQuery.contract_myid, thisPendingQuery.contract_address, thisPendingQuery.proof_type, thisPendingQuery.gas_limit)
           } else {
-            var targetDate = new Date(targetUnix * 1000)
+            var targetDate = moment(targetUnix, 'X').toDate()
             processQueryInFuture(targetDate, thisPendingQuery)
           }
         } else {
@@ -638,7 +639,7 @@ function deployOraclize () {
     logger.info('successfully deployed all contracts')
     oraclizeConfiguration.connector = activeOracleInstance.connector
     oraclizeConfiguration.account = activeOracleInstance.account
-    configFilePath = toFullPath('./config/instance/oracle_instance_' + parseInt(Date.now() / 1000) + '.json')
+    configFilePath = toFullPath('./config/instance/oracle_instance_' + moment().unix() + '.json')
     try {
       bridgeUtil.saveJsonFile(configFilePath, oraclizeConfiguration)
       logger.info('instance configuration file saved to ' + configFilePath)
@@ -906,7 +907,7 @@ function handleLog (data) {
       if (typeof data !== 'object' || typeof data.result === 'undefined' || typeof data.result.id === 'undefined') return logger.error('no HTTP myid found, skipping log...')
       myid = data.result.id
       logger.info('new HTTP query created, id: ' + myid)
-      var unixTime = parseInt(Date.now() / 1000)
+      var unixTime = moment().unix()
       var queryCheckUnixTime = getQueryUnixTime(time, unixTime)
       Query.create({'active': true, 'callback_complete': false, 'retry_number': 0, 'target_timestamp': queryCheckUnixTime, 'oar': activeOracleInstance.oar, 'connector': activeOracleInstance.connector, 'cbAddress': activeOracleInstance.account, 'http_myid': myid, 'contract_myid': myIdInitial, 'query_delay': time, 'query_arg': JSON.stringify(formula), 'query_datasource': ds, 'contract_address': cAddr, 'event_tx': eventTx, 'block_tx_hash': blockHashTx, 'proof_type': proofType, 'gas_limit': gasLimit}, function (err, res) {
         if (err !== null) logger.error('query db create error', err)
@@ -914,7 +915,7 @@ function handleLog (data) {
           logger.info('checking HTTP query ' + myid + ' status in 0 seconds')
           checkQueryStatus(myid, myIdInitial, cAddr, proofType, gasLimit)
         } else {
-          var targetDate = new Date(queryCheckUnixTime * 1000)
+          var targetDate = moment(queryCheckUnixTime, 'X').toDate()
           processQueryInFuture(targetDate, {'active': true, 'callback_complete': false, 'retry_number': 0, 'target_timestamp': queryCheckUnixTime, 'oar': activeOracleInstance.oar, 'connector': activeOracleInstance.connector, 'cbAddress': activeOracleInstance.account, 'http_myid': myid, 'contract_myid': myIdInitial, 'query_delay': time, 'query_arg': JSON.stringify(formula), 'query_datasource': ds, 'contract_address': cAddr, 'event_tx': eventTx, 'block_tx_hash': blockHashTx, 'proof_type': proofType, 'gas_limit': gasLimit})
         }
         myIdList = arrayCleanUp(myIdList)
@@ -1059,7 +1060,7 @@ function manageErrors (err) {
             fetchLogsByBlock(latestBlockNumber, nodeStatus)
           }
 
-          schedule.scheduleJob(new Date(parseInt(Date.now() + 5000)), function () {
+          schedule.scheduleJob(moment().add(5, 'seconds').toDate(), function () {
             logger.info('restarting logs...')
 
             // chain re-org listen
@@ -1109,7 +1110,7 @@ function createQuery (query, callback) {
     if (error) {
       logger.error('HTTP query create request error ', error)
       logger.info('re-trying to create the query again in 5 seconds...')
-      schedule.scheduleJob(new Date(parseInt(Date.now() + 5000)), function () {
+      schedule.scheduleJob(moment().add(5, 'seconds').toDate(), function () {
         var newTime = toPositiveNumber(query.when - 5)
         query.when = newTime
         createQuery(query, callback)

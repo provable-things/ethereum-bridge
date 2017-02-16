@@ -15,6 +15,7 @@
     "ethereumjs-tx": "^1.2.5",
     "ethereumjs-util": "^5.1.1",
     "i18n": "0.8.3",
+    "moment": "^2.17.1",
     "multihashes": "^0.3.3",
     "node-async-loop": "^1.2.2",
     "node-schedule": "^1.2.0",
