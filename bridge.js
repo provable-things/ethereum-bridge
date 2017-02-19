@@ -511,10 +511,10 @@ function nodeError () {
 
 function checkBridgeVersion (callback) {
   request.get('https://api.oraclize.it/v1/platform/info', {json: true, headers: { 'X-User-Agent': BRIDGE_NAME + '/' + BRIDGE_VERSION + ' (nodejs)' }}, function (error, response, body) {
-    if (error) return
+    if (error) return callback(error, null)
     try {
       if (response.statusCode === 200) {
-        if (!(BRIDGE_NAME in body.result.distributions)) return
+        if (!(BRIDGE_NAME in body.result.distributions)) return callback(new Error('Bridge name not found', null))
         var latestVersion = body.result.distributions[BRIDGE_NAME].latest.version
         if (versionCompare(BRIDGE_VERSION, latestVersion) === -1) {
           logger.warn('\n************************************************************************\nA NEW VERSION OF THIS TOOL HAS BEEN DETECTED\nIT IS HIGHLY RECOMMENDED THAT YOU ALWAYS RUN THE LATEST VERSION, PLEASE UPGRADE TO ' + BRIDGE_NAME.toUpperCase() + ' ' + latestVersion + '\n************************************************************************\n')
@@ -531,11 +531,11 @@ function checkBridgeVersion (callback) {
               pricingInfo.push({'name': thisDatasource.name, 'proof': thisDatasource.proof_types[j] + 1, 'units': units})
             }
           }
-          callback(null, true)
+          return callback(null, true)
         }
-      }
+      } else return callback(new Error(response.statusCode, 'HTTP status', null))
     } catch (e) {
-      callback(e, null)
+      return callback(e, null)
     }
   })
 }
@@ -625,7 +625,7 @@ function deployOraclize () {
     },
     function setPricing (result, callback) {
       oraclizeConfiguration.oar = result.oar
-      if (ops['disable-price'] === true) {
+      if (ops['disable-price'] === true || pricingInfo.length == 0 || basePrice <= 0) {
         logger.warn('skipping pricing update...')
         callback(null, null)
       } else {
