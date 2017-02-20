@@ -329,10 +329,10 @@ if (ops.instance) {
       startUpLog(true)
     })
   } else if (ops.new && !ops.broadcast) throw new Error('--new flag requires --broadcast mode')
-  else return startUpLog(true)
+  else startUpLog(true)
 } else {
   if (ops.new) throw new Error('cannot generate a new address if contracts are already deployed, please remove the --new flag')
-  return startUpLog(false, oraclizeConfiguration)
+  startUpLog(false, oraclizeConfiguration)
 }
 
 function toFullPath (filePath) {
@@ -476,13 +476,13 @@ function startUpLog (newInstance, configFile) {
   logger.info('using', mode, 'mode')
   logger.info('Connecting to ' + BLOCKCHAIN_ABBRV + ' node ' + defaultnode)
   checkBridgeVersion(function (err, res) {
-    if (err) {/* skip error */}
+    if (err) { /* skip error */ }
     try {
       if (newInstance === true) deployOraclize()
       else if (newInstance === false && typeof configFile !== 'undefined') {
         oracleFromConfig(configFile)
       } else throw new Error('failed to deploy/load oracle')
-    } catch(e) {
+    } catch (e) {
       logger.error(e)
     }
   })
@@ -634,7 +634,7 @@ function deployOraclize () {
     },
     function setPricing (result, callback) {
       oraclizeConfiguration.oar = result.oar
-      if (ops['disable-price'] === true || pricingInfo.length == 0 || basePrice <= 0) {
+      if (ops['disable-price'] === true || pricingInfo.length === 0 || basePrice <= 0) {
         logger.warn('skipping pricing update...')
         callback(null, null)
       } else {
@@ -739,11 +739,11 @@ function reorgListen (from) {
 
 function listenToLogs () {
   // listen to events
-  BridgeLogEvents.on('new-log', function(log) {
+  BridgeLogEvents.on('new-log', function (log) {
     if (typeof log !== 'undefined') manageLog(log)
   })
 
-  BridgeLogEvents.on('log-err', function(err) {
+  BridgeLogEvents.on('log-err', function (err) {
     if (typeof err !== 'undefined') manageErrors(err)
   })
 
@@ -751,7 +751,7 @@ function listenToLogs () {
 }
 
 function keepNodeAlive () {
-  setInterval(function() {}, (1000 * 60) * 60)
+  setInterval(function () {}, (1000 * 60) * 60)
 }
 
 function manageLog (data) {
