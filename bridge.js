@@ -513,7 +513,7 @@ function nodeError () {
   var portSplit = nodeinfo[1]
   var startString = i18n.__('connection_failed_tip')
   startString = startString ? startString.replace(/@HOST/g, hostSplit).replace(/@PORT/g, portSplit).replace(/'/g, '"') : ''
-  throw new Error(defaultnode + ' ' + BLOCKCHAIN_NAME + ' node not found, are you sure is it running?\n ' + startString)
+  return logger.error(defaultnode + ' ' + BLOCKCHAIN_NAME + ' node not found, are you sure is it running?\n ' + startString)
 }
 
 function checkBridgeVersion (callback) {
@@ -540,7 +540,7 @@ function checkBridgeVersion (callback) {
           }
           return callback(null, true)
         }
-      }
+      } else return callback(new Error(response.statusCode, 'HTTP status', null))
     } catch (e) {
       return callback(e, null)
     }
@@ -632,7 +632,7 @@ function deployOraclize () {
     },
     function setPricing (result, callback) {
       oraclizeConfiguration.oar = result.oar
-      if (ops['disable-price'] === true) {
+      if (ops['disable-price'] === true || pricingInfo.length == 0 || basePrice <= 0) {
         logger.warn('skipping pricing update...')
         callback(null, null)
       } else {
