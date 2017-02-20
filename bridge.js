@@ -11,6 +11,8 @@ var bridgeUtil = require('./lib/bridge-util')
 var bridgeCore = require('./lib/bridge-core')
 var BridgeAccount = require('./lib/bridge-account')
 var BlockchainInterface = require('./lib/blockchain-interface')
+var BridgeLogManager = require('./lib/bridge-log-manager')
+var BridgeLogEvents = BridgeLogManager.events
 var winston = require('winston')
 var colors = require('colors/safe')
 var async = require('async')
@@ -675,8 +677,10 @@ function runLog () {
   if (checksumOar === '0x6f485C8BF6fc43eA212E93BBF8ce046C7f1cb475') logger.info('you are using a deterministic OAR, you don\'t need to update your contract')
   else console.log('\nPlease add this line to your contract constructor:\n\n' + 'OAR = OraclizeAddrResolverI(' + checksumOar + ');\n')
 
+  BridgeLogManager = BridgeLogManager.init()
+
   // listen for latest events
-  fetchLogs()
+  listenToLogs()
 
   if (isTestRpc || ops.dev) logger.warn('re-org block listen is disabled')
   else reorgListen()
@@ -690,7 +694,7 @@ function runLog () {
   if (blockRangeResume.length === 2) {
     setTimeout(function () {
       logger.info('resuming logs from block range:', blockRangeResume)
-      fetchLogsByBlock(parseInt(blockRangeResume[0]), parseInt(blockRangeResume[1]))
+      BridgeLogManager.fetchLogsByBlock(parseInt(blockRangeResume[0]), parseInt(blockRangeResume[1]))
     }, 5000)
   }
 }
@@ -717,7 +721,7 @@ function reorgListen (from) {
         if (latestBlock > prevBlock && prevBlock !== latestBlock && (latestBlock - initialBlock) > confirmations) {
           prevBlock = latestBlock
           reorgRunning = true
-          fetchLogsByBlock(initialBlock, initialBlock, true)
+          BridgeLogManager.fetchLogsByBlock(initialBlock, initialBlock, true)
           initialBlock += 1
         }
       } catch (e) {
@@ -731,101 +735,19 @@ function reorgListen (from) {
   }
 }
 
-function fetchLogsByBlock (fromBlock, toBlock, reorgType) {
-  if (isTestRpc) return
-  // fetch all connector events
-  try {
-    var contractInstance = activeOracleInstance.getContractInstance()
-    var log1e = contractInstance.Log1({}, {'fromBlock': fromBlock, 'toBlock': toBlock})
-    log1e.get(function (err, data) {
-      if (err == null) {
-        parseMultipleLogs(data)
-        if (fromBlock !== 'latest' && toBlock !== 'latest') log1e.stopWatching()
-      } else {
-        logger.error('fetchLogsByBlock error', err)
-        manageErrors(err)
-      }
-    })
-
-    var log2e = contractInstance.Log2({}, {'fromBlock': fromBlock, 'toBlock': toBlock})
-    log2e.get(function (err, data) {
-      if (err == null) {
-        parseMultipleLogs(data)
-        if (fromBlock !== 'latest' && toBlock !== 'latest') log2e.stopWatching()
-      } else {
-        logger.error('fetchLogsByBlock error', err)
-        manageErrors(err)
-      }
-    })
-
-    if (activeOracleInstance.availableLogs.indexOf('LogN') > -1) {
-      var logNe = contractInstance.LogN({}, {'fromBlock': fromBlock, 'toBlock': toBlock})
-      logNe.get(function (err, data) {
-        if (err == null) {
-          parseMultipleLogs(data)
-          if (fromBlock !== 'latest' && toBlock !== 'latest') logNe.stopWatching()
-        } else {
-          logger.error('fetchLogsByBlock error', err)
-          manageErrors(err)
-        }
-      })
-    }
-
-    if (reorgType === true) {
-      setTimeout(function () {
-        reorgRunning = false
-      }, 2000)
-    }
-  } catch (err) {
-    logger.error('log filter error', err)
-  }
-}
-
-function fetchLogs () {
-  // fetch all connector events
-  try {
-    var contractInstance = activeOracleInstance.getContractInstance()
-    contractInstance.Log1({'fromBlock': 'latest', 'toBlock': 'latest'}, function (err, data) {
-      if (err == null) {
-        manageLog(data)
-      } else {
-        logger.error('fetchLog error', err)
-        manageErrors(err)
-      }
-    })
-
-    contractInstance.Log2({'fromBlock': 'latest', 'toBlock': 'latest'}, function (err, data) {
-      if (err == null) {
-        manageLog(data)
-      } else {
-        logger.error('fetchLog error', err)
-        manageErrors(err)
-      }
-    })
-
-    if (activeOracleInstance.availableLogs.indexOf('LogN') > -1) {
-      contractInstance.LogN({'fromBlock': 'latest', 'toBlock': 'latest'}, function (err, data) {
-        if (err == null) {
-          manageLog(data)
-        } else {
-          logger.error('fetchLog error', err)
-          manageErrors(err)
-        }
-      })
-    }
-  } catch (err) {
-    logger.error('log filter error', err)
-  }
-}
-
-function parseMultipleLogs (logsArray) {
-  if (typeof logsArray === 'undefined' || logsArray.length === 0) return
-  asyncLoop(logsArray, function (log, next) {
-    manageLog(log)
-    next(null)
-  }, function (err) {
-    if (err) logger.error('Multiple logs error', err)
+function listenToLogs () {
+  // listen to events
+  BridgeLogEvents.on('new-log', function(log) {
+    if (typeof log !== 'undefined') manageLog(log)
   })
+
+  BridgeLogEvents.on('log-err', function(err) {
+    if (typeof err !== 'undefined') manageErrors(err)
+  })
+
+  BridgeLogManager.watchEvents()
+
+  setInterval(function() {}, (1000 * 60) * 60)
 }
 
 function manageLog (data) {
@@ -1064,7 +986,7 @@ function manageErrors (err) {
           // fetch 'lost' queries
           if (latestBlockNumber < nodeStatus) {
             logger.info('trying to recover "lost" queries...')
-            fetchLogsByBlock(latestBlockNumber, nodeStatus)
+            BridgeLogManager.fetchLogsByBlock(latestBlockNumber, nodeStatus)
           }
 
           schedule.scheduleJob(moment().add(5, 'seconds').toDate(), function () {
