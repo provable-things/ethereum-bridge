@@ -9,6 +9,8 @@ var versionCompare = require('compare-versions')
 var schedule = require('node-schedule')
 var bridgeUtil = require('./lib/bridge-util')
 var bridgeCore = require('./lib/bridge-core')
+var BridgeAccount = require('./lib/bridge-account')
+var BlockchainInterface = require('./lib/blockchain-interface')
 var winston = require('winston')
 var colors = require('colors/safe')
 var async = require('async')
@@ -325,10 +327,10 @@ if (ops.instance) {
       startUpLog(true)
     })
   } else if (ops.new && !ops.broadcast) throw new Error('--new flag requires --broadcast mode')
-  else startUpLog(true)
+  else return startUpLog(true)
 } else {
   if (ops.new) throw new Error('cannot generate a new address if contracts are already deployed, please remove the --new flag')
-  startUpLog(false, oraclizeConfiguration)
+  return startUpLog(false, oraclizeConfiguration)
 }
 
 function toFullPath (filePath) {
@@ -472,10 +474,15 @@ function startUpLog (newInstance, configFile) {
   logger.info('using', mode, 'mode')
   logger.info('Connecting to ' + BLOCKCHAIN_ABBRV + ' node ' + defaultnode)
   checkBridgeVersion(function (err, res) {
-    if (newInstance === true) deployOraclize()
-    else if (newInstance === false && typeof configFile !== 'undefined') {
-      oracleFromConfig(configFile)
-    } else throw new Error('failed to deploy/load oracle')
+    if (err) {/* skip error */}
+    try {
+      if (newInstance === true) deployOraclize()
+      else if (newInstance === false && typeof configFile !== 'undefined') {
+        oracleFromConfig(configFile)
+      } else throw new Error('failed to deploy/load oracle')
+    } catch(e) {
+      logger.error(e)
+    }
   })
 }
 
@@ -484,9 +491,9 @@ function userWarning () {
 }
 
 function checkNodeConnection () {
-  if (!activeOracleInstance.isConnected()) nodeError()
+  if (!BlockchainInterface().isConnected()) nodeError()
   else {
-    var nodeType = bridgeCore.web3.version.node
+    var nodeType = BlockchainInterface().version.node
     isTestRpc = nodeType.match(/TestRPC/) ? true : false
     logger.info('connected to node type', nodeType)
   }
@@ -511,10 +518,10 @@ function nodeError () {
 
 function checkBridgeVersion (callback) {
   request.get('https://api.oraclize.it/v1/platform/info', {json: true, headers: { 'X-User-Agent': BRIDGE_NAME + '/' + BRIDGE_VERSION + ' (nodejs)' }}, function (error, response, body) {
-    if (error) return
+    if (error) return callback(error, null)
     try {
       if (response.statusCode === 200) {
-        if (!(BRIDGE_NAME in body.result.distributions)) return
+        if (!(BRIDGE_NAME in body.result.distributions)) return callback(new Error('Bridge name not found'), null)
         var latestVersion = body.result.distributions[BRIDGE_NAME].latest.version
         if (versionCompare(BRIDGE_VERSION, latestVersion) === -1) {
           logger.warn('\n************************************************************************\nA NEW VERSION OF THIS TOOL HAS BEEN DETECTED\nIT IS HIGHLY RECOMMENDED THAT YOU ALWAYS RUN THE LATEST VERSION, PLEASE UPGRADE TO ' + BRIDGE_NAME.toUpperCase() + ' ' + latestVersion + '\n************************************************************************\n')
@@ -531,11 +538,11 @@ function checkBridgeVersion (callback) {
               pricingInfo.push({'name': thisDatasource.name, 'proof': thisDatasource.proof_types[j] + 1, 'units': units})
             }
           }
-          callback(null, true)
+          return callback(null, true)
         }
       }
     } catch (e) {
-      callback(e, null)
+      return callback(e, null)
     }
   })
 }
@@ -560,7 +567,7 @@ function deployOraclize () {
       var amountToPay = 500000000000000000 - accountBalance
       if (amountToPay > 0) {
         logger.warn(activeOracleInstance.account, 'doesn\'t have enough funds to cover transaction costs, please send at least ' + parseFloat(amountToPay / 1e19) + ' ' + BLOCKCHAIN_BASE_UNIT)
-        if (bridgeCore.web3.version.node.match(/TestRPC/)) {
+        if (BlockchainInterface().version.node.match(/TestRPC/)) {
           // node is TestRPC
           var rl = readline.createInterface({
             input: process.stdin,
@@ -572,7 +579,7 @@ function deployOraclize () {
               var userAccount = ''
               rl.question('Please choose the unlocked account index number in your node: ', function (answ) {
                 if (answ >= 0) {
-                  userAccount = bridgeCore.web3.eth.accounts[answ]
+                  userAccount = BlockchainInterface().inter.accounts[answ]
                   if (typeof (userAccount) === 'undefined') {
                     rl.close()
                     throw new Error('Account at index number: ' + answ + ' not found')
@@ -580,7 +587,7 @@ function deployOraclize () {
                   rl.question('send ' + parseFloat(amountToPay / 1e19) + ' ' + BLOCKCHAIN_BASE_UNIT + ' from account ' + userAccount + ' (index n.: ' + answ + ') to ' + activeOracleInstance.account + ' ? [Y/n]: ', function (answ) {
                     answ = answ.toLowerCase()
                     if (answ.match(/y/)) {
-                      bridgeCore.web3.eth.sendTransaction({'from': userAccount, 'to': activeOracleInstance.account, 'value': amountToPay})
+                      BlockchainInterface().inter.sendTransaction({'from': userAccount, 'to': activeOracleInstance.account, 'value': amountToPay})
                       rl.close()
                     } else {
                       console.log('No authorization given, waiting for funds...')
@@ -616,7 +623,7 @@ function deployOraclize () {
     },
     function deployOAR (result, callback) {
       logger.info('connector deployed to:', result.connector)
-      if (deterministicOar === true && bridgeCore.getAccountNonce(bridgeCore.getTempAccount()) === 0) logger.info('deploying the address resolver with a deterministic address...')
+      if (deterministicOar === true && BlockchainInterface().getAccountNonce(BridgeAccount().getTempAddress()) === 0) logger.info('deploying the address resolver with a deterministic address...')
       else {
         logger.warn('deterministic OAR disabled/not available, please update your contract with the new custom address generated')
         logger.info('deploying the address resolver contract...')
@@ -698,14 +705,14 @@ function processQueryInFuture (date, query) {
 function reorgListen (from) {
   try {
     if (isTestRpc) return
-    var initialBlock = from || bridgeCore.web3.eth.blockNumber - (confirmations * 2)
+    var initialBlock = from || BlockchainInterface().inter.blockNumber - (confirmations * 2)
     var prevBlock = -1
     var latestBlock = -1
     reorgRunning = false
     reorgInterval = setInterval(function () {
       try {
         if (reorgRunning === true) return
-        latestBlock = bridgeCore.web3.eth.blockNumber
+        latestBlock = BlockchainInterface().inter.blockNumber
         if (prevBlock === -1) prevBlock = latestBlock
         if (latestBlock > prevBlock && prevBlock !== latestBlock && (latestBlock - initialBlock) > confirmations) {
           prevBlock = latestBlock
@@ -878,7 +885,7 @@ function handleLog (data) {
     var myIdInitial = data['cid']
     if (ops.dev !== true && myIdList.indexOf(myIdInitial) > -1) return
     myIdList.push(myIdInitial)
-    latestBlockNumber = bridgeCore.web3.eth.blockNumber
+    latestBlockNumber = BlockchainInterface().inter.blockNumber
     var myid = myIdInitial
     var cAddr = data['sender']
     var ds = data['datasource']
@@ -1049,7 +1056,7 @@ function manageErrors (err) {
     logger.warn('JSON RPC error, trying to re-connect every 30 seconds')
     var nodeStatusCheck = setInterval(function () {
       try {
-        var nodeStatus = bridgeCore.web3.eth.blockNumber
+        var nodeStatus = BlockchainInterface().inter.blockNumber
         if (nodeStatus > 0) {
           clearInterval(nodeStatusCheck)
           logger.info('json-rpc is now available')
