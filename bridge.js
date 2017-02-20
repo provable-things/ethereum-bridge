@@ -687,6 +687,8 @@ function runLog () {
 
   logger.info('Listening @ ' + activeOracleInstance.connector + ' (Oraclize Connector)\n')
 
+  keepNodeAlive()
+
   console.log('(Ctrl+C to exit)\n')
 
   processPendingQueries()
@@ -746,7 +748,9 @@ function listenToLogs () {
   })
 
   BridgeLogManager.watchEvents()
+}
 
+function keepNodeAlive () {
   setInterval(function() {}, (1000 * 60) * 60)
 }
 
