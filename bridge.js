@@ -4,7 +4,6 @@ var stdio = require('stdio')
 var request = require('request')
 var readline = require('readline')
 var i18n = require('i18n')
-var caminte = require('caminte')
 var versionCompare = require('compare-versions')
 var schedule = require('node-schedule')
 var bridgeUtil = require('./lib/bridge-util')
@@ -12,6 +11,7 @@ var bridgeCore = require('./lib/bridge-core')
 var BridgeAccount = require('./lib/bridge-account')
 var BlockchainInterface = require('./lib/blockchain-interface')
 var BridgeLogManager = require('./lib/bridge-log-manager')
+var BridgeDbManager = require('./lib/bridge-db-manager').BridgeDbManager
 var BridgeLogEvents = BridgeLogManager.events
 var winston = require('winston')
 var colors = require('colors/safe')
@@ -38,17 +38,10 @@ function colorize (string) {
   } else return string
 }
 
-var DbSchema = caminte.Schema
 var dbConfig = {
   'driver': 'tingodb',
-  'database': './database/tingodb/'
+  'database': path.resolve(__dirname, './database/tingodb/')
 }
-
-if (!fs.existsSync(dbConfig.database)) {
-  fs.mkdirSync(dbConfig.database)
-}
-
-var db = new DbSchema(dbConfig.driver, dbConfig)
 
 i18n.configure({
   defaultLocale: 'ethereum',
@@ -63,40 +56,16 @@ var BLOCKCHAIN_BASE_UNIT = i18n.__('base_unit')
 var BRIDGE_NAME = i18n.__('bridge_name')
 var BRIDGE_VERSION = require('./package.json').version
 
-var Query = db.define('Queries', {
-  'contract_myid': {type: DbSchema.String},
-  'http_myid': {type: DbSchema.String},
-  'event_tx': {type: DbSchema.String},
-  'block_tx_hash': {type: DbSchema.String},
-  'query_active': {type: DbSchema.Boolean, default: true},
-  'callback_complete': {type: DbSchema.Boolean, default: false},
-  'callback_error': {type: DbSchema.Boolean, default: false},
-  'retry_number': {type: DbSchema.Number, default: 0},
-  'target_timestamp': {type: DbSchema.Date, default: 0},
-  'oar': {type: DbSchema.String},
-  'connector': {type: DbSchema.String},
-  'cbAddress': {type: DbSchema.String},
-  'query_delay': {type: DbSchema.Number, default: 0},
-  'query_datasource': {type: DbSchema.String},
-  'query_arg': {type: DbSchema.String},
-  'contract_address': {type: DbSchema.String},
-  'proof_type': {type: DbSchema.String, default: '0x00'},
-  'gas_limit': {type: DbSchema.Number, default: 200000},
-  'timestamp_db': {type: DbSchema.Date, default: Date.now() },
-  'bridge_version': {type: DbSchema.String, default: BRIDGE_VERSION}
-})
+if (!fs.existsSync(dbConfig.database)) {
+  fs.mkdirSync(dbConfig.database)
+}
 
-var CallbackTx = db.define('CallbackTxs', {
-  'tx_hash': {type: DbSchema.String},
-  'contract_myid': {type: DbSchema.String},
-  'contract_address': {type: DbSchema.String},
-  'result': {type: DbSchema.String},
-  'proof': {type: DbSchema.String, default: '0x00'},
-  'gas_limit': {type: DbSchema.Number, default: 200000},
-  'errors': {type: DbSchema.String},
-  'timestamp_db': {type: DbSchema.Date, default: Date.now() },
-  'bridge_version': {type: DbSchema.String, default: BRIDGE_VERSION}
-})
+dbConfig['BRIDGE_VERSION'] = BRIDGE_VERSION
+
+BridgeDbManager(dbConfig)
+
+var Query = BridgeDbManager().Query
+var CallbackTx = BridgeDbManager().CallbackTx
 
 var mode = 'active'
 var defaultnode = 'localhost:8545'
