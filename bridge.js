@@ -496,7 +496,7 @@ function checkNodeConnection () {
   if (!BlockchainInterface().isConnected()) nodeError()
   else {
     var nodeType = BlockchainInterface().version.node
-    isTestRpc = nodeType.match(/TestRPC/) ? true : false
+    isTestRpc = nodeType.match(/TestRPC/i) ? true : false
     logger.info('connected to node type', nodeType)
   }
 }
@@ -569,7 +569,7 @@ function deployOraclize () {
       var amountToPay = 500000000000000000 - accountBalance
       if (amountToPay > 0) {
         logger.warn(activeOracleInstance.account, 'doesn\'t have enough funds to cover transaction costs, please send at least ' + parseFloat(amountToPay / 1e19) + ' ' + BLOCKCHAIN_BASE_UNIT)
-        if (BlockchainInterface().version.node.match(/TestRPC/)) {
+        if (BlockchainInterface().version.node.match(/TestRPC/i)) {
           // node is TestRPC
           var rl = readline.createInterface({
             input: process.stdin,
@@ -682,7 +682,12 @@ function runLog () {
   // listen for latest events
   listenToLogs()
 
-  if (isTestRpc || ops.dev) logger.warn('re-org block listen is disabled')
+  if (isTestRpc && !ops.dev) {
+    logger.warn('re-org block listen is disabled while using TestRPC')
+    logger.warn('if you are running a test suit with Truffle and TestRPC or your chain is reset often please use the --dev mode')
+  }
+
+  if (ops.dev) logger.warn('re-org block listen is disabled in --dev mode')
   else reorgListen()
 
   logger.info('Listening @ ' + activeOracleInstance.connector + ' (Oraclize Connector)\n')
@@ -764,9 +769,9 @@ function manageLog (data) {
         if (activeOracleInstance.isOracleEvent(data)) {
           handleLog(data)
         } else {
-          logger.warn('log with contract myid:', contractMyid, 'was triggered, but is not recognized as an oracle event')
+          logger.warn('log with contract myid:', contractMyid, 'was triggered, but is not recognized as an oracle event, skipping event...')
         }
-      } else logger.warn('log with contract myid:', contractMyid, 'was triggered, but it was already seen before')
+      } else logger.warn('log with contract myid:', contractMyid, 'was triggered, but it was already seen before, skipping event...')
     })
   } catch (e) {
     logger.error('manageLog error', e)
