@@ -781,7 +781,8 @@ function handleLog (data) {
     logger.info('new log ', data)
     var eventTx = data['transactionHash']
     var blockHashTx = data['blockHash']
-    data = data['args']
+    var logObj = data
+    data = logObj['args']
     var myIdInitial = data['cid']
     if (ops.dev !== true && myIdList.indexOf(myIdInitial) > -1) return
     myIdList.push(myIdInitial)
@@ -790,13 +791,16 @@ function handleLog (data) {
     var cAddr = data['sender']
     var ds = data['datasource']
     var formula = data['arg']
-    if (typeof (data['arg']) !== 'undefined') {
+    if (logObj['event'] === 'Log1') {
+      if (typeof data['arg'] === 'undefined') return logger.error('error, Log1 event is missing "arg", skipping...')
       if (data['arg'] === false) return logger.error('malformed log, skipping...')
       formula = data['arg']
-    } else if (typeof (data['args']) !== 'undefined') {
+    } else if (logObj['event'] === 'LogN') {
+      if (typeof data['args'] === 'undefined') return logger.error('error, LogN event is missing "args", skipping...')
       if (data['args'] === false) return logger.error('malformed log, skipping...')
       formula = cbor.decodeAllSync(new Buffer(data['args'].substr(2), 'hex'))[0]
-    } else {
+    } else if (logObj['event'] === 'Log2') {
+      if (typeof data['arg1'] === 'undefined' && typeof data['arg2'] === 'undefined') return logger.error('error, Log2 event is missing "arg1" and "arg2", skipping...')
       if (data['arg1'] === false || data['arg2'] === false) return logger.error('malformed log, skipping...')
       formula = [data['arg1'], data['arg2']]
     }
