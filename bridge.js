@@ -1066,3 +1066,13 @@ function checkErrors (data) {
     return true
   }
 }
+
+process.on('exit', function () {
+  if (typeof activeOracleInstance !== 'undefined' &&
+   activeOracleInstance.connector &&
+   activeOracleInstance.oar &&
+   activeOracleInstance.account) {
+    console.log('To load this instance again use: --instance latest')
+  }
+  console.log('Exiting...')
+})
