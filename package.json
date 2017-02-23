@@ -19,7 +19,7 @@
     "multihashes": "^0.3.3",
     "node-async-loop": "^1.2.2",
     "node-schedule": "^1.2.0",
-    "pragma-singleton": "^1.0.3",
+    "pragma-singleton": "1.0.3",
     "request": "^2.78.0",
     "stdio": "^0.2.7",
     "tingodb": "^0.5.1",
