@@ -84,6 +84,7 @@ var isTestRpc = false
 var reorgInterval = []
 var blockRangeResume = []
 var pricingInfo = []
+var officialOar = []
 var basePrice = 0 // in ETH
 
 var ops = stdio.getopt({
@@ -467,6 +468,14 @@ function checkNodeConnection () {
     var nodeType = BlockchainInterface().version.node
     isTestRpc = nodeType.match(/TestRPC/i) ? true : false
     logger.info('connected to node type', nodeType)
+    try {
+      for (var i = officialOar.length - 1; i >= 0; i--) {
+        var oarCode = bridgeCore.ethUtil.addHexPrefix(BlockchainInterface().inter.getCode(officialOar[i], 'latest'))
+        if (oarCode === null || oarCode === '0x' || oarCode === '0x0') officialOar.splice(i, 1)
+      }
+    } catch (e) {
+      officialOar = []
+    }
   }
 }
 
@@ -492,7 +501,7 @@ function checkBridgeVersion (callback) {
     if (error) return callback(error, null)
     try {
       if (response.statusCode === 200) {
-        if (!(BRIDGE_NAME in body.result.distributions)) return callback(new Error('Bridge name not found'), null)
+        if (typeof body !== 'object' || !(BRIDGE_NAME in body.result.distributions)) return callback(new Error('Bridge name not found'), null)
         var latestVersion = body.result.distributions[BRIDGE_NAME].latest.version
         if (versionCompare(BRIDGE_VERSION, latestVersion) === -1) {
           logger.warn('\n************************************************************************\nA NEW VERSION OF THIS TOOL HAS BEEN DETECTED\nIT IS HIGHLY RECOMMENDED THAT YOU ALWAYS RUN THE LATEST VERSION, PLEASE UPGRADE TO ' + BRIDGE_NAME.toUpperCase() + ' ' + latestVersion + '\n************************************************************************\n')
@@ -509,8 +518,14 @@ function checkBridgeVersion (callback) {
               pricingInfo.push({'name': thisDatasource.name, 'proof': thisDatasource.proof_types[j] + 1, 'units': units})
             }
           }
-          return callback(null, true)
         }
+        if (typeof body.result.deployments !== 'undefined' && BLOCKCHAIN_NAME in body.result.deployments) {
+          var deployments = body.result.deployments[BLOCKCHAIN_NAME]
+          Object.keys(deployments).forEach(function (key) {
+            officialOar.push(deployments[key]['addressResolver'])
+          })
+        }
+        return callback(null, true)
       } else return callback(new Error(response.statusCode, 'HTTP status', null))
     } catch (e) {
       return callback(e, null)
@@ -603,17 +618,17 @@ function deployOraclize () {
     },
     function setPricing (result, callback) {
       oraclizeConfiguration.oar = result.oar
+      logger.info('address resolver (OAR) deployed to:', oraclizeConfiguration.oar)
       if (ops['disable-price'] === true || pricingInfo.length === 0 || basePrice <= 0) {
         logger.warn('skipping pricing update...')
         callback(null, null)
       } else {
-        logger.info('updating pricing...')
+        logger.info('updating connector pricing...')
         activeOracleInstance.setPricing(activeOracleInstance.connector, callback)
       }
     }
   ], function (err, result) {
     if (err) throw new Error(err)
-    logger.info('address resolver (OAR) deployed to:', oraclizeConfiguration.oar)
     logger.info('successfully deployed all contracts')
     oraclizeConfiguration.connector = activeOracleInstance.connector
     oraclizeConfiguration.account = activeOracleInstance.account
@@ -642,6 +657,8 @@ function checkVersion () {
 }
 
 function runLog () {
+  if (officialOar.length > 0) logger.info('an "official" Oraclize address resolver was found on your blockchain:', officialOar[0], 'you can use that instead and quit the bridge')
+
   var checksumOar = bridgeCore.ethUtil.toChecksumAddress(activeOracleInstance.oar)
   if (checksumOar === '0x6f485C8BF6fc43eA212E93BBF8ce046C7f1cb475') logger.info('you are using a deterministic OAR, you don\'t need to update your contract')
   else console.log('\nPlease add this line to your contract constructor:\n\n' + 'OAR = OraclizeAddrResolverI(' + checksumOar + ');\n')
