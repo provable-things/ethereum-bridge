@@ -77,7 +77,6 @@ var defaultGas = 3000000
 var resumeQueries = false
 var skipQueries = false
 var confirmations = 12
-var callbackRunning = false
 var reorgRunning = false
 var latestBlockNumber = -1
 var isTestRpc = false
@@ -877,7 +876,6 @@ function checkQueryStatus (myid, myIdInitial, contractAddress, proofType, gasLim
   if (typeof myid === 'undefined') return logger.error('checkQueryStatus error, http myid provided is invalid')
   logger.info('checking HTTP query', myid, 'status every 5 seconds...')
   var interval = setInterval(function () {
-    if (callbackRunning === true) return
     queryStatus(myid, function (data) {
       logger.info(myid, 'HTTP query result: ', data)
       if (typeof data !== 'object' || typeof data.result === 'undefined') {
@@ -932,7 +930,6 @@ function getProof (proofContent, proofType) {
 function queryComplete (gasLimit, myid, result, proof, contractAddr, proofType) {
   // if(/*|| queryDoc.callback_complete==true*/) return;
   try {
-    callbackRunning = true
     // queryDoc.callback_complete = true;
     // updateQueriesDB(queryDoc);
     if (typeof gasLimit === 'undefined' || typeof myid === 'undefined' || typeof contractAddr === 'undefined' || typeof proofType === 'undefined') {
@@ -955,7 +952,6 @@ function queryComplete (gasLimit, myid, result, proof, contractAddr, proofType) 
     })
   } catch (e) {
     logger.error('queryComplete error ', e)
-    callbackRunning = false
   }
 }
 
@@ -1005,7 +1001,6 @@ function manageErrors (err) {
 }
 
 function queryCompleteErrors (err) {
-  callbackRunning = false
   logger.error(err)
   if (err) {
     manageErrors(err)
@@ -1023,12 +1018,10 @@ function updateQuery (callbackInfo, contract, errors) {
   Query.update({where: {'contract_myid': callbackInfo.myid}}, dataDbUpdate, function (err, res) {
     if (err) logger.error('queries database update failed for query with contract myid', callbackInfo.myid)
     if (contract === null) {
-      callbackRunning = false
       return logger.error('transaction hash not found, callback tx database not updated', contract)
     }
     CallbackTx.create({'contract_myid': callbackInfo.myid, 'tx_hash': contract.transactionHash, 'contract_address': contract.to, 'result': callbackInfo.result, 'proof': callbackInfo.proof, 'gas_limit': contract.gasUsed, 'errors': errors}, function (err, res) {
       if (err) logger.error('failed to add a new transaction to database', err)
-      callbackRunning = false
     })
   })
 }
