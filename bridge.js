@@ -946,7 +946,7 @@ function queryComplete (gasLimit, myid, result, proof, contractAddr, proofType) 
           updateQuery(callbackObj, null, err)
           return logger.error('callback tx error, contract myid: ' + myid, err)
         }
-        logger.info('Contract ' + contractAddr + ' __callback called', callbackObj)
+        logger.info('contract ' + contractAddr + ' __callback tx confirmed, transaction hash:', contract.transactionHash, callbackObj)
         updateQuery(callbackObj, contract, null)
       })
     })
@@ -962,7 +962,11 @@ function checkCallbackTx (myid, callback) {
     if (res === null) return callback(new Error('queryComplete error, query with contract myid ' + myid + ' not found in database'), null)
     if (typeof res.callback_complete === 'undefined') return callback(new Error('queryComplete error, query with contract myid ' + myid), null)
     if (res.callback_complete === true) return callback(null, true)
-    else return callback(null, false)
+    else {
+      var eventTx = BlockchainInterface().inter.getTransaction(res.event_tx)
+      if (typeof eventTx === 'undefined' || eventTx.blockHash === null || eventTx.blockHash !== res.block_tx_hash) return callback(new Error('queryComplete error, query with contract myid ' + myid + ' mismatch with block hash stored'), null)
+      return callback(null, false)
+    }
   })
 }
 
