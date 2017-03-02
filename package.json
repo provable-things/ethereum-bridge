@@ -16,7 +16,7 @@
     "ethereumjs-util": "5.1.1",
     "i18n": "^0.8.3",
     "moment": "^2.17.1",
-    "multihashes": "^0.3.3",
+    "multihashes": "^0.4.3",
     "node-async-loop": "^1.2.2",
     "node-schedule": "^1.2.0",
     "pragma-singleton": "1.0.3",
@@ -27,7 +27,7 @@
     "winston": "^2.3.1"
   },
   "devDependencies": {
-    "standard": "^8.6.0"
+    "standard": "*"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
