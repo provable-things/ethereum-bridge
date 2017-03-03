@@ -152,7 +152,7 @@ if (ops.from && ops.to) {
   if (ops.to === 'latest' || ops.from === 'latest') throw new Error('latest is not allowed')
   if (ops.from < ops.to) throw new Error('toBlock should be above fromBlock')
   blockRangeResume = [ops.from, ops.to]
-  logger.info('block range to resume:', blockRangeResume)
+  logger.info('block range to resume:', JSON.stringify(blockRangeResume))
 } else if (ops.from && !ops.to) throw new Error('--from flag requires the --to flag')
 else if (!ops.from && ops.to) throw new Error('--to flag requires the --from flag')
 
@@ -685,7 +685,7 @@ function runLog () {
 
   if (blockRangeResume.length === 2) {
     setTimeout(function () {
-      logger.info('resuming logs from block range:', blockRangeResume)
+      logger.info('resuming logs from block range:', JSON.stringify(blockRangeResume))
       BridgeLogManager.fetchLogsByBlock(parseInt(blockRangeResume[0]), parseInt(blockRangeResume[1]))
     }, 5000)
   }
