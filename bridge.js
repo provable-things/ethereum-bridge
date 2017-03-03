@@ -803,6 +803,7 @@ function handleLog (data) {
     if (ops.dev !== true && myIdList.indexOf(myIdInitial) > -1) return
     myIdList.push(myIdInitial)
     latestBlockNumber = BlockchainInterface().inter.blockNumber
+    if (typeof data.removed !== 'undefined' && data.removed === true) return logger.error('this log was removed because of orphaned block, rejected tx or re-org, skipping...')
     var myid = myIdInitial
     var cAddr = data['sender']
     var ds = data['datasource']
@@ -811,15 +812,16 @@ function handleLog (data) {
       if (typeof data['arg'] === 'undefined') return logger.error('error, Log1 event is missing "arg", skipping...')
       if (data['arg'] === false) return logger.error('malformed log, skipping...')
       formula = data['arg']
-    } else if (logObj['event'] === 'LogN') {
-      if (typeof data['args'] === 'undefined') return logger.error('error, LogN event is missing "args", skipping...')
-      if (data['args'] === false) return logger.error('malformed log, skipping...')
-      formula = cbor.decodeAllSync(new Buffer(data['args'].substr(2), 'hex'))[0]
     } else if (logObj['event'] === 'Log2') {
       if (typeof data['arg1'] === 'undefined' && typeof data['arg2'] === 'undefined') return logger.error('error, Log2 event is missing "arg1" and "arg2", skipping...')
       if (data['arg1'] === false || data['arg2'] === false) return logger.error('malformed log, skipping...')
       formula = [data['arg1'], data['arg2']]
+    } else if (logObj['event'] === 'LogN') {
+      if (typeof data['args'] === 'undefined') return logger.error('error, LogN event is missing "args", skipping...')
+      if (data['args'] === false) return logger.error('malformed log, skipping...')
+      formula = cbor.decodeAllSync(new Buffer(data['args'].substr(2), 'hex'))[0]
     }
+
     var time = data['timestamp'].toNumber()
     var gasLimit = data['gaslimit'].toNumber()
     var proofType = bridgeCore.ethUtil.addHexPrefix(data['proofType'])
