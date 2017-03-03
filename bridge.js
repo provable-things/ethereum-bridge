@@ -889,18 +889,13 @@ function checkQueryStatus (myid, myIdInitial, contractAddress, proofType, gasLim
       if (bridgeUtil.containsProof(proofType)) {
         dataProof = bridgeUtil.getProof(data.result.checks[data.result.checks.length - 1]['proofs'][0], proofType)
       }
-      // queryDoc.active = false;
-      // updateQueriesDB(queryDoc);
       queryComplete(gasLimit, myIdInitial, dataRes, dataProof, contractAddress, proofType)
     })
   }, 5000)
 }
 
 function queryComplete (gasLimit, myid, result, proof, contractAddr, proofType) {
-  // if(/*|| queryDoc.callback_complete==true*/) return;
   try {
-    // queryDoc.callback_complete = true;
-    // updateQueriesDB(queryDoc);
     if (typeof gasLimit === 'undefined' || typeof myid === 'undefined' || typeof contractAddr === 'undefined' || typeof proofType === 'undefined') {
       return queryCompleteErrors('queryComplete error, __callback arguments are empty')
     }
@@ -939,11 +934,11 @@ function checkCallbackTx (myid, callback) {
     if (typeof res.callback_complete === 'undefined') return callback(new Error('queryComplete error, query with contract myid ' + myid), null)
     if (res.callback_complete === true) return callback(null, true)
     else return callback(null, false)
-    /*else {
+    /* else {
       var eventTx = BlockchainInterface().inter.getTransaction(res.event_tx)
       if (eventTx === null || eventTx.blockHash === null || eventTx.blockHash !== res.block_tx_hash) return callback(new Error('queryComplete error, query with contract myid ' + myid + ' mismatch with block hash stored'), null)
       return callback(null, false)
-    }*/
+    } */
   })
 }
 
