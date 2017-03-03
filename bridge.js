@@ -938,9 +938,16 @@ function queryComplete (gasLimit, myid, result, proof, contractAddr, proofType) 
     checkCallbackTx(myid, function (findErr, alreadyCalled) {
       if (findErr !== null) return queryCompleteErrors(findErr)
       if (alreadyCalled === true) return queryCompleteErrors('queryComplete error, __callback for contract myid', myid, 'was already called before, skipping...')
-      var callbackData = bridgeUtil.callbackTxEncode(myid, result, proof, proofType)
-      logger.info('sending __callback tx...', {'contract_myid': myid, 'contract_address': contractAddr})
-      activeOracleInstance.sendTx({'from': activeOracleInstance.account, 'to': bridgeCore.ethUtil.addHexPrefix(contractAddr), 'gas': gasLimit, 'data': callbackData}, function (err, contract) {
+      var callbackObj = {
+        'myid': myid,
+        'result': result,
+        'proof': proof,
+        'proof_type': proofType,
+        'contract_address': bridgeCore.ethUtil.addHexPrefix(contractAddr),
+        'gas_limit': gasLimit
+      }
+      logger.info('sending __callback tx...', {'contract_myid': callbackObj.myid, 'contract_address': callbackObj.contract_address})
+      activeOracleInstance.__callback(callbackObj, function (err, contract) {
         var callbackObj = {'myid': myid, 'result': result, 'proof': proof}
         if (err) {
           updateQuery(callbackObj, null, err)
@@ -964,7 +971,7 @@ function checkCallbackTx (myid, callback) {
     if (res.callback_complete === true) return callback(null, true)
     else {
       var eventTx = BlockchainInterface().inter.getTransaction(res.event_tx)
-      if (typeof eventTx === 'undefined' || eventTx.blockHash === null || eventTx.blockHash !== res.block_tx_hash) return callback(new Error('queryComplete error, query with contract myid ' + myid + ' mismatch with block hash stored'), null)
+      if (eventTx === null || eventTx.blockHash === null || eventTx.blockHash !== res.block_tx_hash) return callback(new Error('queryComplete error, query with contract myid ' + myid + ' mismatch with block hash stored'), null)
       return callback(null, false)
     }
   })
