@@ -150,7 +150,7 @@ var logger = new (winston.Logger)({
 
 if (ops.from && ops.to) {
   if (ops.to === 'latest' || ops.from === 'latest') throw new Error('latest is not allowed')
-  if (ops.from < ops.to) throw new Error('toBlock should be above fromBlock')
+  if (parseInt(ops.to) < parseInt(ops.from)) throw new Error('toBlock should be above fromBlock')
   blockRangeResume = [ops.from, ops.to]
   logger.info('block range to resume:', JSON.stringify(blockRangeResume))
 } else if (ops.from && !ops.to) throw new Error('--from flag requires the --to flag')
