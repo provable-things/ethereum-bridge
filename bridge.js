@@ -832,6 +832,9 @@ function handleLog (data) {
     }
 
     var time = data['timestamp'].toNumber()
+    var unixTime = moment().unix()
+    if (!bridgeUtil.isValidTime(time, unixTime)) return logger.error('the query is too far in the future, skipping event...')
+
     var gasLimit = data['gaslimit'].toNumber()
     var proofType = bridgeCore.ethUtil.addHexPrefix(data['proofType'])
     var query = {
@@ -845,7 +848,6 @@ function handleLog (data) {
       if (typeof data !== 'object' || typeof data.result === 'undefined' || typeof data.result.id === 'undefined') return logger.error('no HTTP myid found, skipping log...')
       myid = data.result.id
       logger.info('new HTTP query created, id: ' + myid)
-      var unixTime = moment().unix()
       var queryCheckUnixTime = bridgeUtil.getQueryUnixTime(time, unixTime)
       Query.create({'active': true, 'callback_complete': false, 'retry_number': 0, 'target_timestamp': queryCheckUnixTime, 'oar': activeOracleInstance.oar, 'connector': activeOracleInstance.connector, 'cbAddress': activeOracleInstance.account, 'http_myid': myid, 'contract_myid': myIdInitial, 'query_delay': time, 'query_arg': JSON.stringify(formula), 'query_datasource': ds, 'contract_address': cAddr, 'event_tx': eventTx, 'block_tx_hash': blockHashTx, 'proof_type': proofType, 'gas_limit': gasLimit}, function (err, res) {
         if (err !== null) logger.error('query db create error', err)
