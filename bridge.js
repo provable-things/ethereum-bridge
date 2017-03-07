@@ -638,7 +638,7 @@ function deployOraclize () {
     logger.info('successfully deployed all contracts')
     oraclizeConfiguration.connector = activeOracleInstance.connector
     oraclizeConfiguration.account = activeOracleInstance.account
-    var oraclizeInstanceNewName = 'oracle_instance_' + moment().format('YYYYMMDDZZHHmmss') + '.json'
+    var oraclizeInstanceNewName = 'oracle_instance_' + moment().format('YYYYMMDDTHHmmss') + '.json'
     configFilePath = toFullPath('./config/instance/' + oraclizeInstanceNewName)
     currentInstance = oraclizeInstanceNewName
     try {
@@ -930,7 +930,7 @@ function queryComplete (gasLimit, myid, result, proof, contractAddr, proofType) 
           updateQuery(callbackObj, null, err)
           return logger.error('callback tx error, contract myid: ' + myid, err)
         }
-        logger.info('contract ' + contractAddr + ' __callback tx confirmed, transaction hash:', contract.transactionHash, callbackObj)
+        logger.info('contract ' + contractAddr + ' __callback tx sent, transaction hash:', contract.transactionHash, callbackObj)
         updateQuery(callbackObj, contract, null)
       })
     })
