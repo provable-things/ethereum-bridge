@@ -694,10 +694,12 @@ function runLog () {
     var latestBlockTemp = BlockchainInterface().inter.blockNumber
     var latestBlockMemory = activeOracleInstance.latestBlockNumber
     if (latestBlockTemp > latestBlockMemory) {
-      logger.info('latest block seen:', latestBlockMemory, ',processing', (latestBlockTemp - latestBlockMemory), 'new blocks')
+      logger.info('latest block seen:', latestBlockMemory, '- processing', (latestBlockTemp - latestBlockMemory), 'new blocks')
       BridgeLogManager.fetchLogsByBlock(latestBlockMemory, latestBlockTemp)
     }
   }
+
+  activeOracleInstance.latestBlockNumber = BlockchainInterface().inter.blockNumber
 
   processPendingQueries()
 
