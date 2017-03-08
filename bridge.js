@@ -672,6 +672,8 @@ function runLog () {
   else console.log('\nPlease add this line to your contract constructor:\n\n' + 'OAR = OraclizeAddrResolverI(' + checksumOar + ');\n')
 
   BridgeLogManager = BridgeLogManager.init()
+  
+  var latestBlockMemory = activeOracleInstance.latestBlockNumber
 
   // listen for latest events
   listenToLogs()
@@ -690,9 +692,8 @@ function runLog () {
 
   console.log('(Ctrl+C to exit)\n')
 
-  if (!isTestRpc && !ops.dev && activeOracleInstance.latestBlockNumber !== -1) {
+  if (!isTestRpc && !ops.dev && latestBlockMemory !== -1) {
     var latestBlockTemp = BlockchainInterface().inter.blockNumber
-    var latestBlockMemory = activeOracleInstance.latestBlockNumber
     if (latestBlockTemp > latestBlockMemory) {
       logger.info('latest block seen:', latestBlockMemory, '- processing', (latestBlockTemp - latestBlockMemory), 'new blocks')
       BridgeLogManager.fetchLogsByBlock(latestBlockMemory, latestBlockTemp)
