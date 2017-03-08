@@ -236,6 +236,7 @@ if (ops['disable-deterministic-oar']) {
 }
 
 var oraclizeConfiguration = {
+  'latest_block_number': -1,
   'oar': ops.oar,
   'node': {
     'main': defaultnode,
@@ -808,6 +809,7 @@ function handleLog (data) {
     if (ops.dev !== true && myIdList.indexOf(myIdInitial) > -1) return
     myIdList.push(myIdInitial)
     latestBlockNumber = BlockchainInterface().inter.blockNumber
+    activeOracleInstance.latestBlockNumber = latestBlockNumber
     if (typeof data.removed !== 'undefined' && data.removed === true) return logger.error('this log was removed because of orphaned block, rejected tx or re-org, skipping...')
     var myid = myIdInitial
     var cAddr = data['sender']
@@ -1047,6 +1049,11 @@ process.on('exit', function () {
    activeOracleInstance.connector &&
    activeOracleInstance.oar &&
    activeOracleInstance.account) {
+    var oracleInstancePath = path.resolve('./config/instance/', currentInstance)
+    var oracleInstanceTemp = JSON.parse(fs.readFileSync(oracleInstancePath).toString())
+    oracleInstanceTemp.latest_block_number = activeOracleInstance.latestBlockNumber
+    //fs.unlinkSync(oracleInstancePath)
+    fs.writeFileSync(oracleInstancePath, JSON.stringify(oracleInstanceTemp, null, 4))
     console.log('To load this instance again: node bridge --instance ' + currentInstance)
   }
   console.log('Exiting...')
