@@ -690,6 +690,15 @@ function runLog () {
 
   console.log('(Ctrl+C to exit)\n')
 
+  if (!isTestRpc && !ops.dev && activeOracleInstance.latestBlockNumber !== -1) {
+    var latestBlockTemp = BlockchainInterface().inter.blockNumber
+    var latestBlockMemory = activeOracleInstance.latestBlockNumber
+    if (latestBlockTemp > latestBlockMemory) {
+      logger.info('latest block seen:', latestBlockMemory, ',processing', (latestBlockTemp - latestBlockMemory), 'new blocks')
+      BridgeLogManager.fetchLogsByBlock(latestBlockMemory, latestBlockTemp)
+    }
+  }
+
   processPendingQueries()
 
   if (blockRangeResume.length === 2) {
@@ -1052,7 +1061,6 @@ process.on('exit', function () {
     var oracleInstancePath = path.resolve('./config/instance/', currentInstance)
     var oracleInstanceTemp = JSON.parse(fs.readFileSync(oracleInstancePath).toString())
     oracleInstanceTemp.latest_block_number = activeOracleInstance.latestBlockNumber
-    //fs.unlinkSync(oracleInstancePath)
     fs.writeFileSync(oracleInstancePath, JSON.stringify(oracleInstanceTemp, null, 4))
     console.log('To load this instance again: node bridge --instance ' + currentInstance)
   }
