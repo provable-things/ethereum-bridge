@@ -77,7 +77,6 @@ var defaultGas = 3000000
 var resumeQueries = false
 var skipQueries = false
 var confirmations = 12
-var reorgRunning = false
 var latestBlockNumber = -1
 var isTestRpc = false
 var reorgInterval = []
@@ -713,16 +712,13 @@ function reorgListen (from) {
     var initialBlock = from || BlockchainInterface().inter.blockNumber - (confirmations * 2)
     var prevBlock = -1
     var latestBlock = -1
-    reorgRunning = false
     reorgInterval = setInterval(function () {
       try {
-        if (reorgRunning === true) return
         latestBlock = BlockchainInterface().inter.blockNumber
         if (prevBlock === -1) prevBlock = latestBlock
         if (latestBlock > prevBlock && prevBlock !== latestBlock && (latestBlock - initialBlock) > confirmations) {
           prevBlock = latestBlock
-          reorgRunning = true
-          BridgeLogManager.fetchLogsByBlock(initialBlock, initialBlock, true)
+          BridgeLogManager.fetchLogsByBlock(initialBlock, initialBlock)
           initialBlock += 1
         }
       } catch (e) {
@@ -977,7 +973,7 @@ function manageErrors (err) {
             logger.info('restarting logs...')
 
             // chain re-org listen
-            reorgListen()
+            reorgListen(latestBlockNumber)
           })
         }
       } catch (e) {
