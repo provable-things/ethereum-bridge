@@ -85,6 +85,7 @@ var pricingInfo = []
 var officialOar = []
 var currentInstance = 'latest'
 var basePrice = 0 // in ETH
+var txQueueCounter = 0
 
 var ops = stdio.getopt({
   'instance': {args: 1, description: 'filename of the oracle configuration file that can be found in ./config/instance/ (i.e. oracle_instance_148375903.json)'},
@@ -313,6 +314,15 @@ function getInstances () {
 
 function toFullPath (filePath) {
   return path.join(__dirname, filePath)
+}
+
+function increaseTxQueue () {
+  txQueueCounter += 1
+}
+
+function decreaseTxQueue () {
+  txQueueCounter -= 1
+  if (txQueueCounter <= 0) txQueueCounter = 0
 }
 
 function oracleFromConfig (config) {
@@ -672,7 +682,7 @@ function runLog () {
   else console.log('\nPlease add this line to your contract constructor:\n\n' + 'OAR = OraclizeAddrResolverI(' + checksumOar + ');\n')
 
   BridgeLogManager = BridgeLogManager.init()
-  
+
   var latestBlockMemory = activeOracleInstance.latestBlockNumber
 
   // listen for latest events
@@ -934,15 +944,19 @@ function queryComplete (gasLimit, myid, result, proof, contractAddr, proofType) 
         'gas_limit': gasLimit
       }
       logger.info('sending __callback tx...', {'contract_myid': callbackObj.myid, 'contract_address': callbackObj.contract_address})
-      activeOracleInstance.__callback(callbackObj, function (err, contract) {
-        var callbackObj = {'myid': myid, 'result': result, 'proof': proof}
-        if (err) {
-          updateQuery(callbackObj, null, err)
-          return logger.error('callback tx error, contract myid: ' + myid, err)
-        }
-        logger.info('contract ' + contractAddr + ' __callback tx sent, transaction hash:', contract.transactionHash, callbackObj)
-        updateQuery(callbackObj, contract, null)
-      })
+      increaseTxQueue()
+      setTimeout(function () {
+        activeOracleInstance.__callback(callbackObj, function (err, contract) {
+          decreaseTxQueue()
+          var callbackObj = {'myid': myid, 'result': result, 'proof': proof}
+          if (err) {
+            updateQuery(callbackObj, null, err)
+            return logger.error('callback tx error, contract myid: ' + myid, err)
+          }
+          logger.info('contract ' + contractAddr + ' __callback tx sent, transaction hash:', contract.transactionHash, callbackObj)
+          updateQuery(callbackObj, contract, null)
+        })
+      }, (txQueueCounter * 500))
     })
   } catch (e) {
     logger.error('queryComplete error ', e)
