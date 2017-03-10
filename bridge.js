@@ -9,6 +9,8 @@ var schedule = require('node-schedule')
 var bridgeUtil = require('./lib/bridge-util')
 var bridgeCore = require('./lib/bridge-core')
 var BridgeAccount = require('./lib/bridge-account')
+var BridgeTxQueue = require('./lib/bridge-tx-queue')
+var queue = BridgeTxQueue().queue
 var BlockchainInterface = require('./lib/blockchain-interface')
 var BridgeLogManager = require('./lib/bridge-log-manager')
 var BridgeDbManager = require('./lib/bridge-db-manager').BridgeDbManager
@@ -85,7 +87,6 @@ var pricingInfo = []
 var officialOar = []
 var currentInstance = 'latest'
 var basePrice = 0 // in ETH
-var txQueueCounter = 0
 
 var ops = stdio.getopt({
   'instance': {args: 1, description: 'filename of the oracle configuration file that can be found in ./config/instance/ (i.e. oracle_instance_148375903.json)'},
@@ -314,15 +315,6 @@ function getInstances () {
 
 function toFullPath (filePath) {
   return path.join(__dirname, filePath)
-}
-
-function increaseTxQueue () {
-  txQueueCounter += 1
-}
-
-function decreaseTxQueue () {
-  txQueueCounter -= 1
-  if (txQueueCounter <= 0) txQueueCounter = 0
 }
 
 function oracleFromConfig (config) {
@@ -944,10 +936,8 @@ function queryComplete (gasLimit, myid, result, proof, contractAddr, proofType) 
         'gas_limit': gasLimit
       }
       logger.info('sending __callback tx...', {'contract_myid': callbackObj.myid, 'contract_address': callbackObj.contract_address})
-      increaseTxQueue()
-      setTimeout(function () {
+      queue.push(function (cb) {
         activeOracleInstance.__callback(callbackObj, function (err, contract) {
-          decreaseTxQueue()
           var callbackObj = {'myid': myid, 'result': result, 'proof': proof}
           if (err) {
             updateQuery(callbackObj, null, err)
@@ -955,8 +945,9 @@ function queryComplete (gasLimit, myid, result, proof, contractAddr, proofType) 
           }
           logger.info('contract ' + contractAddr + ' __callback tx sent, transaction hash:', contract.transactionHash, callbackObj)
           updateQuery(callbackObj, contract, null)
+          cb()
         })
-      }, (txQueueCounter * 500))
+      })
     })
   } catch (e) {
     logger.error('queryComplete error ', e)
