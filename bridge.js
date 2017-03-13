@@ -474,7 +474,7 @@ function checkNodeConnection () {
   if (!BlockchainInterface().isConnected()) nodeError()
   else {
     var nodeType = BlockchainInterface().version.node
-    isTestRpc = nodeType.match(/TestRPC/i) ? true : false
+    isTestRpc = !!nodeType.match(/TestRPC/i)
     logger.info('connected to node type', nodeType)
     try {
       for (var i = officialOar.length - 1; i >= 0; i--) {
