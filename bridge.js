@@ -1034,31 +1034,31 @@ function updateQuery (callbackInfo, contract, errors) {
 
 function createQuery (query, callback) {
   request.post('https://api.oraclize.it/v1/query/create', {body: query, json: true, headers: { 'X-User-Agent': BRIDGE_NAME + '/' + BRIDGE_VERSION + ' (nodejs)' }}, function (error, response, body) {
-    if (error) {
+    if (error || (response.statusCode !== 200 && response.statusCode !== 401)) {
       logger.error('HTTP query create request error ', error)
-      logger.info('re-trying to create the query again in 5 seconds...')
-      schedule.scheduleJob(moment().add(5, 'seconds').toDate(), function () {
-        var newTime = bridgeUtil.toPositiveNumber(query.when - 5)
+      logger.info('re-trying to create the query again in 20 seconds...')
+      schedule.scheduleJob(moment().add(20, 'seconds').toDate(), function () {
+        var newTime = bridgeUtil.toPositiveNumber(query.when - 20)
         query.when = newTime
         createQuery(query, callback)
       })
     } else {
       if (response.statusCode === 200) {
         callback(body)
-      } else logger.error('UNEXPECTED ANSWER FROM THE ORACLIZE ENGINE, PLEASE UPGRADE TO THE LATEST ' + BRIDGE_NAME.toUpperCase())
+      } else if (response.statusCode === 401) return logger.error('UNEXPECTED ANSWER FROM THE ORACLIZE ENGINE, PLEASE UPGRADE TO THE LATEST ' + BRIDGE_NAME.toUpperCase())
     }
   })
 }
 
 function queryStatus (queryId, callback) {
   request.get('https://api.oraclize.it/v1/query/' + queryId + '/status', {json: true, headers: { 'X-User-Agent': BRIDGE_NAME + '/' + BRIDGE_VERSION + ' (nodejs)' }}, function (error, response, body) {
-    if (error) {
+    if (error || (response.statusCode !== 200 && response.statusCode !== 401)) {
       logger.error('HTTP query status request error ', error)
       callback({'result': {}, 'bridge_request_error': true})
     } else {
       if (response.statusCode === 200) {
         callback(body)
-      } else logger.error('UNEXPECTED ANSWER FROM THE ORACLIZE ENGINE, PLEASE UPGRADE TO THE LATEST ' + BRIDGE_NAME.toUpperCase())
+      } else if (response.statusCode === 401) return logger.error('UNEXPECTED ANSWER FROM THE ORACLIZE ENGINE, PLEASE UPGRADE TO THE LATEST ' + BRIDGE_NAME.toUpperCase())
     }
   })
 }
