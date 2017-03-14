@@ -712,6 +712,8 @@ function runLog () {
       BridgeLogManager.fetchLogsByBlock(parseInt(blockRangeResume[0]), parseInt(blockRangeResume[1]))
     }, 5000)
   }
+
+  checkCallbackTxs()
 }
 
 function processQueryInFuture (date, query) {
@@ -796,7 +798,7 @@ function isAlreadyProcessed (contractMyid, cb) {
 function isAlreadyProcessedDb (contractMyid, cb) {
   Query.findOne({where: {'contract_myid': contractMyid}}, function (err, query1) {
     if (err) logger.error('Query database findOne error', err)
-    CallbackTx.findOne({where: {'contract_myid': contractMyid}}, function (err2, query2) {
+    CallbackTx.findOne({where: {'$and': [{'contract_myid': contractMyid}, {'tx_confirmed': false}]}}, function (err2, query2) {
       if (err2 || err) {
         logger.error('Callback database findOne error', err2, err)
         return cb(new Error('database error'), false)
@@ -1024,7 +1026,7 @@ function updateQuery (callbackInfo, contract, errors) {
     if (contract === null) {
       return logger.error('transaction hash not found, callback tx database not updated', contract)
     }
-    CallbackTx.create({'contract_myid': callbackInfo.myid, 'tx_hash': contract.transactionHash, 'contract_address': contract.to, 'result': callbackInfo.result, 'proof': callbackInfo.proof, 'gas_limit': contract.gasUsed, 'errors': errors}, function (err, res) {
+    CallbackTx.create({'oar': activeOracleInstance.oar, 'cbAddress': activeOracleInstance.account, 'connector': activeOracleInstance.connector, 'contract_myid': callbackInfo.myid, 'tx_hash': contract.transactionHash, 'contract_address': contract.to, 'result': callbackInfo.result, 'proof': callbackInfo.proof, 'gas_limit': contract.gasUsed, 'errors': errors}, function (err, res) {
       if (err) logger.error('failed to add a new transaction to database', err)
     })
   })
@@ -1059,6 +1061,40 @@ function queryStatus (queryId, callback) {
       } else logger.error('UNEXPECTED ANSWER FROM THE ORACLIZE ENGINE, PLEASE UPGRADE TO THE LATEST ' + BRIDGE_NAME.toUpperCase())
     }
   })
+}
+
+function checkCallbackTxs () {
+  setInterval(function () {
+    if (!activeOracleInstance.oar || !activeOracleInstance.account || !activeOracleInstance.connector) return
+    if (BlockchainInterface().isConnected() && BlockchainInterface().inter.syncing === false) {
+      CallbackTx.find({'tx_confirmed': false, 'oar': activeOracleInstance.oar, 'cbAddress': activeOracleInstance.account}, function (err, res) {
+        if (err) return logger.error('failed to fetch callback tx', err)
+        if (res.length === 0) return
+        asyncLoop(res, function (transaction, next) {
+          if (transaction.tx_hash === null) return next(null)
+          var txContent = BlockchainInterface().inter.getTransaction(transaction.tx_hash)
+          if (txContent !== null && txContent.blockHash !== null) {
+            var newCallbackUpdate = {'tx_confirmed': true, 'tx_confirmed_block_hash': txContent.blockHash}
+            CallbackTx.update({where: {'tx_hash': transaction.tx_hash}}, newCallbackUpdate, function (errUpdate, resUpdate) {
+              if (errUpdate) return next(errUpdate)
+              logger.info('transaction hash', transaction.tx_hash, 'was confirmed in block', newCallbackUpdate.tx_confirmed_block_hash)
+              return next(null)
+            })
+          } else if ((moment().unix() - moment(transaction.timestamp_db).unix()) > 600) {
+            Query.findOne({where: {'contract_myid': transaction.contract_myid, 'oar': activeOracleInstance.oar, 'cbAddress': activeOracleInstance.account}}, function (errQuery, contractInfo) {
+              if (errQuery) return next(errQuery)
+              if (contractInfo === null) return next(null)
+              logger.warn('__callback transaction', transaction.tx_hash, 'not confirmed after 10 minutes')
+              checkQueryStatus(contractInfo.http_myid, contractInfo.contract_myid, contractInfo.contract_address, contractInfo.proof_type, contractInfo.gas_limit)
+              return next(null)
+            })
+          } else return next(null)
+        }, function (err) {
+          if (err) logger.error('check callback txs error', err)
+        })
+      })
+    }
+  }, 300000)
 }
 
 process.on('exit', function () {
