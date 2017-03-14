@@ -962,11 +962,12 @@ function checkCallbackTx (myid, callback) {
     if (err) return callback(err, null)
     if (res === null) return callback(new Error('queryComplete error, query with contract myid ' + myid + ' not found in database'), null)
     if (typeof res.callback_complete === 'undefined') return callback(new Error('queryComplete error, query with contract myid ' + myid), null)
-    CallbackTx.findOne({where: {'contract_myid': myid}}, function (errC, resC) {
-      if ((errC || resC === null) && res.callback_complete === true) return callback(null, true)
-      if (typeof res.tx_confirmed !== 'undefined') {
-        if (res.tx_confirmed === false && (moment().unix() - moment(res.timestamp_db).unix()) > 600) return callback(null, false)
-        if (res.tx_confirmed === true) return callback(null, true)
+    CallbackTx.findOne({where: {'contract_myid': myid}}, function (errC, resContract) {
+      if (errC) {}
+      if (res.callback_complete === true) return callback(null, true)
+      if (resContract !== null && typeof resContract.tx_confirmed !== 'undefined') {
+        if (resContract.tx_confirmed === false && (moment().unix() - moment(resContract.timestamp_db).unix()) > 600) return callback(null, false)
+        if (resContract.tx_confirmed === true) return callback(null, true)
       } else return callback(null, false)
     })
   })
