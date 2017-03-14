@@ -928,7 +928,7 @@ function queryComplete (gasLimit, myid, result, proof, contractAddr, proofType) 
     }
     checkCallbackTx(myid, function (findErr, alreadyCalled) {
       if (findErr !== null) return queryCompleteErrors(findErr)
-      if (alreadyCalled === true) return queryCompleteErrors('queryComplete error, __callback for contract myid', myid, 'was already called before, skipping...')
+      if (alreadyCalled === true) return logger.error('queryComplete error, __callback for contract myid', myid, 'was already called before, skipping...')
       var callbackObj = {
         'myid': myid,
         'result': result,
@@ -962,18 +962,18 @@ function checkCallbackTx (myid, callback) {
     if (err) return callback(err, null)
     if (res === null) return callback(new Error('queryComplete error, query with contract myid ' + myid + ' not found in database'), null)
     if (typeof res.callback_complete === 'undefined') return callback(new Error('queryComplete error, query with contract myid ' + myid), null)
-    if (res.callback_complete === true) return callback(null, true)
-    else return callback(null, false)
-    /* else {
-      var eventTx = BlockchainInterface().inter.getTransaction(res.event_tx)
-      if (eventTx === null || eventTx.blockHash === null || eventTx.blockHash !== res.block_tx_hash) return callback(new Error('queryComplete error, query with contract myid ' + myid + ' mismatch with block hash stored'), null)
-      return callback(null, false)
-    } */
+    CallbackTx.findOne({where: {'contract_myid': myid}}, function (errC, resC) {
+      if ((errC || resC === null) && res.callback_complete === true) return callback(null, true)
+      if (typeof res.tx_confirmed !== 'undefined') {
+        if (res.tx_confirmed === false && (moment().unix() - moment(res.timestamp_db).unix()) > 600) return callback(null, false)
+        if (res.tx_confirmed === true) return callback(null, true)
+      } else return callback(null, false)
+    })
   })
 }
 
 function manageErrors (err) {
-  if (err.message.match(/Invalid JSON RPC response/)) {
+  if (typeof err !== 'undefined' && typeof err.message !== 'undefined' && err.message.match(/Invalid JSON RPC response/)) {
     clearInterval(reorgInterval)
     // retry after 1 minute
     logger.warn('JSON RPC error, trying to re-connect every 30 seconds')
@@ -1014,12 +1014,12 @@ function queryCompleteErrors (err) {
 }
 
 function updateQuery (callbackInfo, contract, errors) {
-  var dataDbUpdate = {}
+  var dataDbUpdate = {'$set': {}}
   if (errors !== null) {
-    dataDbUpdate = {'query_active': false, 'callback_complete': false, '$inc': {'retry_number': 1}}
+    dataDbUpdate['$set'] = {'query_active': false, 'callback_complete': false, '$inc': {'retry_number': 1}}
     if (!errors.message.match(/Invalid JSON RPC response/)) dataDbUpdate.callback_error = true
   } else {
-    dataDbUpdate = {'query_active': false, 'callback_complete': true}
+    dataDbUpdate['$set'] = {'query_active': false, 'callback_complete': true}
   }
   Query.update({where: {'contract_myid': callbackInfo.myid}}, dataDbUpdate, function (err, res) {
     if (err) logger.error('queries database update failed for query with contract myid', callbackInfo.myid)
@@ -1067,17 +1067,17 @@ function checkCallbackTxs () {
   setInterval(function () {
     if (!activeOracleInstance.oar || !activeOracleInstance.account || !activeOracleInstance.connector) return
     if (BlockchainInterface().isConnected() && BlockchainInterface().inter.syncing === false) {
-      CallbackTx.find({'tx_confirmed': false, 'oar': activeOracleInstance.oar, 'cbAddress': activeOracleInstance.account}, function (err, res) {
+      CallbackTx.find({'where': {'tx_confirmed': false, 'oar': activeOracleInstance.oar, 'cbAddress': activeOracleInstance.account}}, function (err, res) {
         if (err) return logger.error('failed to fetch callback tx', err)
         if (res.length === 0) return
         asyncLoop(res, function (transaction, next) {
           if (transaction.tx_hash === null) return next(null)
           var txContent = BlockchainInterface().inter.getTransaction(transaction.tx_hash)
           if (txContent !== null && txContent.blockHash !== null) {
-            var newCallbackUpdate = {'tx_confirmed': true, 'tx_confirmed_block_hash': txContent.blockHash}
+            var newCallbackUpdate = {'$set': {'tx_confirmed': true, 'tx_confirmed_block_hash': txContent.blockHash}}
             CallbackTx.update({where: {'tx_hash': transaction.tx_hash}}, newCallbackUpdate, function (errUpdate, resUpdate) {
               if (errUpdate) return next(errUpdate)
-              logger.info('transaction hash', transaction.tx_hash, 'was confirmed in block', newCallbackUpdate.tx_confirmed_block_hash)
+              logger.info('transaction hash', transaction.tx_hash, 'was confirmed in block', txContent.blockHash)
               return next(null)
             })
           } else if ((moment().unix() - moment(transaction.timestamp_db).unix()) > 600) {
