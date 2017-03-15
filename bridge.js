@@ -798,7 +798,7 @@ function isAlreadyProcessed (contractMyid, cb) {
 function isAlreadyProcessedDb (contractMyid, cb) {
   Query.findOne({where: {'contract_myid': contractMyid}}, function (err, query1) {
     if (err) logger.error('Query database findOne error', err)
-    CallbackTx.findOne({where: {'$and': [{'contract_myid': contractMyid}, {'tx_confirmed': false}]}}, function (err2, query2) {
+    CallbackTx.findOne({where: {'contract_myid': contractMyid, 'tx_confirmed': false}}, function (err2, query2) {
       if (err2 || err) {
         logger.error('Callback database findOne error', err2, err)
         return cb(new Error('database error'), false)
@@ -1050,19 +1050,19 @@ function queryCompleteErrors (err) {
 }
 
 function updateQuery (callbackInfo, contract, errors) {
-  var dataDbUpdate = {'$set': {}}
+  var dataDbUpdate = {}
   if (errors !== null) {
-    dataDbUpdate['$set'] = {'query_active': false, 'callback_complete': false, '$inc': {'retry_number': 1}}
+    dataDbUpdate = {'query_active': false, 'callback_complete': false, '$inc': {'retry_number': 1}}
     if (!errors.message.match(/Invalid JSON RPC response/)) dataDbUpdate.callback_error = true
   } else {
-    dataDbUpdate['$set'] = {'query_active': false, 'callback_complete': true}
+    dataDbUpdate = {'query_active': false, 'callback_complete': true}
   }
-  Query.update({where: {'contract_myid': callbackInfo.myid}}, dataDbUpdate, function (err, res) {
+  Query.update({where: {'contract_myid': callbackInfo.myid}}, {'$set': dataDbUpdate}, function (err, res) {
     if (err) logger.error('queries database update failed for query with contract myid', callbackInfo.myid)
     if (contract === null) {
       return logger.error('transaction hash not found, callback tx database not updated', contract)
     }
-    CallbackTx.create({'oar': activeOracleInstance.oar, 'cbAddress': activeOracleInstance.account, 'connector': activeOracleInstance.connector, 'contract_myid': callbackInfo.myid, 'tx_hash': contract.transactionHash, 'contract_address': contract.to, 'result': callbackInfo.result, 'proof': callbackInfo.proof, 'gas_limit': contract.gasUsed, 'errors': errors}, function (err, res) {
+    CallbackTx.updateOrCreate({'contract_myid': callbackInfo.myid}, {'oar': activeOracleInstance.oar, 'cbAddress': activeOracleInstance.account, 'connector': activeOracleInstance.connector, 'contract_myid': callbackInfo.myid, 'tx_hash': contract.transactionHash, 'contract_address': contract.to, 'result': callbackInfo.result, 'proof': callbackInfo.proof, 'gas_limit': contract.gasUsed, 'errors': errors}, function (err, res) {
       if (err) logger.error('failed to add a new transaction to database', err)
     })
   })
@@ -1122,8 +1122,11 @@ function checkCallbackTxs () {
               if (contractInfo === null) return next(null)
               logger.warn('__callback transaction', transaction.tx_hash, 'not confirmed after 10 minutes')
               contractInfo.force_query = true
-              checkQueryStatus(contractInfo)
-              return next(null)
+              var preCallbackUpdate = {'$set': {'timestamp_db': moment().unix() * 1000}}
+              CallbackTx.update({where: {'tx_hash': transaction.tx_hash}}, preCallbackUpdate, function (errUpdate, resUpdate) {
+                checkQueryStatus(contractInfo)
+                next(null)
+              })
             })
           } else return next(null)
         }, function (err) {
@@ -1131,7 +1134,7 @@ function checkCallbackTxs () {
         })
       })
     }
-  }, 300000)
+  }, 180000)
 }
 
 process.on('exit', function () {
