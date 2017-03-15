@@ -1116,13 +1116,13 @@ function checkCallbackTxs () {
               logger.info('transaction hash', transaction.tx_hash, 'was confirmed in block', txContent.blockHash)
               return next(null)
             })
-          } else if ((moment().unix() - moment(transaction.timestamp_db).unix()) > 300) {
+          } else if ((moment().format('x') - transaction.timestamp_db) > 300) {
             Query.findOne({where: {'contract_myid': transaction.contract_myid, 'oar': activeOracleInstance.oar, 'cbAddress': activeOracleInstance.account}}, function (errQuery, contractInfo) {
               if (errQuery) return next(errQuery)
               if (contractInfo === null) return next(null)
               logger.warn('__callback transaction', transaction.tx_hash, 'not confirmed after 5 minutes, resuming query with contract myid', contractInfo.contract_myid)
               contractInfo.force_query = true
-              var preCallbackUpdate = {'$set': {'timestamp_db': (moment().unix() * 1000)}}
+              var preCallbackUpdate = {'$set': {'timestamp_db': moment().format('x')}}
               CallbackTx.update({where: {'tx_hash': transaction.tx_hash}}, preCallbackUpdate, function (errUpdate, resUpdate) {
                 checkQueryStatus(contractInfo)
                 return next(null)
