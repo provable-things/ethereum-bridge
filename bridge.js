@@ -675,7 +675,7 @@ function runLog () {
 
   BridgeLogManager = BridgeLogManager.init()
 
-  var latestBlockMemory = activeOracleInstance.latestBlockNumber
+  var latestBlockMemory = activeOracleInstance.latestBlockNumber + 1
 
   // listen for latest events
   listenToLogs()
