@@ -1066,7 +1066,7 @@ function updateQuery (callbackInfo, contract, errors, callback) {
       callback()
       return logger.error('transaction hash not found, callback tx database not updated', contract)
     }
-    CallbackTx.updateOrCreate({where: {'contract_myid': callbackInfo.myid}}, {'timestamp_db': moment().format('x'), 'oar': activeOracleInstance.oar, 'cbAddress': activeOracleInstance.account, 'connector': activeOracleInstance.connector, 'contract_myid': callbackInfo.myid, 'tx_hash': contract.transactionHash, 'contract_address': contract.to, 'result': callbackInfo.result, 'proof': callbackInfo.proof, 'gas_limit': contract.gasUsed, 'errors': errors}, function (err, res) {
+    CallbackTx.updateOrCreate({'contract_myid': callbackInfo.myid}, {'timestamp_db': moment().format('x'), 'oar': activeOracleInstance.oar, 'cbAddress': activeOracleInstance.account, 'connector': activeOracleInstance.connector, 'contract_myid': callbackInfo.myid, 'tx_hash': contract.transactionHash, 'contract_address': contract.to, 'result': callbackInfo.result, 'proof': callbackInfo.proof, 'gas_limit': contract.gasUsed, 'errors': errors}, function (err, res) {
       if (err) logger.error('failed to add a new transaction to database', err)
       callback()
     })
