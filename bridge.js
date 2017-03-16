@@ -1062,7 +1062,7 @@ function updateQuery (callbackInfo, contract, errors) {
     if (contract === null) {
       return logger.error('transaction hash not found, callback tx database not updated', contract)
     }
-    CallbackTx.updateOrCreate({'contract_myid': callbackInfo.myid}, {'oar': activeOracleInstance.oar, 'cbAddress': activeOracleInstance.account, 'connector': activeOracleInstance.connector, 'contract_myid': callbackInfo.myid, 'tx_hash': contract.transactionHash, 'contract_address': contract.to, 'result': callbackInfo.result, 'proof': callbackInfo.proof, 'gas_limit': contract.gasUsed, 'errors': errors}, function (err, res) {
+    CallbackTx.updateOrCreate({where: {'contract_myid': callbackInfo.myid}}, {'oar': activeOracleInstance.oar, 'cbAddress': activeOracleInstance.account, 'connector': activeOracleInstance.connector, 'contract_myid': callbackInfo.myid, 'tx_hash': contract.transactionHash, 'contract_address': contract.to, 'result': callbackInfo.result, 'proof': callbackInfo.proof, 'gas_limit': contract.gasUsed, 'errors': errors}, function (err, res) {
       if (err) logger.error('failed to add a new transaction to database', err)
     })
   })
@@ -1119,7 +1119,8 @@ function checkCallbackTxs () {
           } else if ((moment().format('x') - transaction.timestamp_db) > 300000) {
             Query.findOne({where: {'contract_myid': transaction.contract_myid}}, function (errQuery, contractInfo) {
               if (errQuery) return next(errQuery)
-              if (contractInfo === null) return next(null)
+              txContent = BlockchainInterface().inter.getTransactionReceipt(transaction.tx_hash) // check again
+              if (contractInfo === null || txContent !== null) return next(null)
               logger.warn('__callback transaction', transaction.tx_hash, 'not confirmed after 5 minutes, resuming query with contract myid', contractInfo.contract_myid)
               contractInfo.force_query = true
               CallbackTx.remove({where: {'tx_hash': transaction.tx_hash}}, function (errUpdate, resUpdate) {
