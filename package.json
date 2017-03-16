@@ -20,7 +20,6 @@
     "node-async-loop": "^1.2.2",
     "node-schedule": "^1.2.1",
     "pragma-singleton": "1.0.3",
-    "queue": "^4.2.1",
     "request": "^2.81.0",
     "stdio": "^0.2.7",
     "tingodb": "^0.5.1",
