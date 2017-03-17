@@ -713,7 +713,7 @@ function runLog () {
     }, 5000)
   }
 
-  checkCallbackTxs()
+  if (!isTestRpc && !ops.dev) checkCallbackTxs()
 }
 
 function processQueryInFuture (date, query) {
