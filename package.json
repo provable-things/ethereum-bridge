@@ -10,7 +10,7 @@
     "cbor": "^3.0.0",
     "colors": "^1.1.2",
     "compare-versions": "^3.0.0",
-    "eth-lightwallet": "2.5.3",
+    "eth-lightwallet": "^2.5.4",
     "ethereumjs-abi": "0.6.4",
     "ethereumjs-tx": "1.2.5",
     "ethereumjs-util": "5.1.1",
