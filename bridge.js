@@ -16,6 +16,7 @@ var BridgeLogEvents = BridgeLogManager.events
 var winston = require('winston')
 var colors = require('colors/safe')
 var async = require('async')
+var queue = async.queue(__callbackWrapper, 1)
 var fs = require('fs')
 var cbor = require('cbor')
 var path = require('path')
@@ -413,7 +414,7 @@ function processPendingQueries (oar, connector, cbAddress) {
           var queryTimeDiff = targetUnix < moment().unix() ? 0 : targetUnix
           logger.info('re-processing query', {'contact_address:': thisPendingQuery.contact_address, 'contact_myid': thisPendingQuery.contract_myid, 'http_myid': thisPendingQuery.http_myid})
           if (queryTimeDiff <= 0) {
-            checkQueryStatus(thisPendingQuery.http_myid, thisPendingQuery.contract_myid, thisPendingQuery.contract_address, thisPendingQuery.proof_type, thisPendingQuery.gas_limit)
+            checkQueryStatus(thisPendingQuery)
           } else {
             var targetDate = moment(targetUnix, 'X').toDate()
             processQueryInFuture(targetDate, thisPendingQuery)
@@ -472,7 +473,7 @@ function checkNodeConnection () {
   if (!BlockchainInterface().isConnected()) nodeError()
   else {
     var nodeType = BlockchainInterface().version.node
-    isTestRpc = nodeType.match(/TestRPC/i) ? true : false
+    isTestRpc = !!nodeType.match(/TestRPC/i)
     logger.info('connected to node type', nodeType)
     try {
       for (var i = officialOar.length - 1; i >= 0; i--) {
@@ -672,7 +673,7 @@ function runLog () {
   else console.log('\nPlease add this line to your contract constructor:\n\n' + 'OAR = OraclizeAddrResolverI(' + checksumOar + ');\n')
 
   BridgeLogManager = BridgeLogManager.init()
-  
+
   var latestBlockMemory = activeOracleInstance.latestBlockNumber
 
   // listen for latest events
@@ -693,6 +694,7 @@ function runLog () {
   console.log('(Ctrl+C to exit)\n')
 
   if (!isTestRpc && !ops.dev && latestBlockMemory !== -1) {
+    latestBlockMemory += 1
     var latestBlockTemp = BlockchainInterface().inter.blockNumber
     if (latestBlockTemp > latestBlockMemory) {
       logger.info('latest block seen:', latestBlockMemory, '- processing', (latestBlockTemp - latestBlockMemory), 'new blocks')
@@ -710,12 +712,14 @@ function runLog () {
       BridgeLogManager.fetchLogsByBlock(parseInt(blockRangeResume[0]), parseInt(blockRangeResume[1]))
     }, 5000)
   }
+
+  if (!isTestRpc && !ops.dev) checkCallbackTxs()
 }
 
 function processQueryInFuture (date, query) {
   logger.info('checking HTTP query ' + query.http_myid + ' status on ' + date)
   schedule.scheduleJob(date, function () {
-    checkQueryStatus(query.http_myid, query.contract_myid, query.contract_address, query.proof_type, query.gas_limit)
+    checkQueryStatus(query)
   })
 }
 
@@ -794,7 +798,7 @@ function isAlreadyProcessed (contractMyid, cb) {
 function isAlreadyProcessedDb (contractMyid, cb) {
   Query.findOne({where: {'contract_myid': contractMyid}}, function (err, query1) {
     if (err) logger.error('Query database findOne error', err)
-    CallbackTx.findOne({where: {'contract_myid': contractMyid}}, function (err2, query2) {
+    CallbackTx.findOne({where: {'contract_myid': contractMyid, 'tx_confirmed': false}}, function (err2, query2) {
       if (err2 || err) {
         logger.error('Callback database findOne error', err2, err)
         return cb(new Error('database error'), false)
@@ -863,7 +867,14 @@ function handleLog (data) {
         if (err !== null) logger.error('query db create error', err)
         if (queryCheckUnixTime <= 0) {
           logger.info('checking HTTP query ' + myid + ' status in 0 seconds')
-          checkQueryStatus(myid, myIdInitial, cAddr, proofType, gasLimit)
+          var queryObj = {
+            'http_myid': myid,
+            'contract_myid': myIdInitial,
+            'contract_address': cAddr,
+            'proof_type': proofType,
+            'gas_limit': gasLimit
+          }
+          checkQueryStatus(queryObj)
         } else {
           var targetDate = moment(queryCheckUnixTime, 'X').toDate()
           processQueryInFuture(targetDate, {'active': true, 'callback_complete': false, 'retry_number': 0, 'target_timestamp': queryCheckUnixTime, 'oar': activeOracleInstance.oar, 'connector': activeOracleInstance.connector, 'cbAddress': activeOracleInstance.account, 'http_myid': myid, 'contract_myid': myIdInitial, 'query_delay': time, 'query_arg': JSON.stringify(formula), 'query_datasource': ds, 'contract_address': cAddr, 'event_tx': eventTx, 'block_tx_hash': blockHashTx, 'proof_type': proofType, 'gas_limit': gasLimit})
@@ -876,7 +887,15 @@ function handleLog (data) {
   }
 }
 
-function checkQueryStatus (myid, myIdInitial, contractAddress, proofType, gasLimit) {
+function checkQueryStatus (queryObj) {
+  var myid = queryObj.http_myid
+  var myIdInitial = queryObj.contract_myid
+  var contractAddress = queryObj.contract_address
+  var proofType = queryObj.proof_type
+  var gasLimit = queryObj.gas_limit
+
+  var forceQuery = queryObj.force_query || false
+
   if (typeof myid === 'undefined') return logger.error('checkQueryStatus error, http myid provided is invalid')
   logger.info('checking HTTP query', myid, 'status every 5 seconds...')
   var interval = setInterval(function () {
@@ -889,6 +908,13 @@ function checkQueryStatus (myid, myIdInitial, contractAddress, proofType, gasLim
       if (typeof data.result.active === 'undefined' || typeof data.result.bridge_request_error !== 'undefined') return
       if (data.result.active === true) return
       var dataProof = null
+      var queryComplObj = {
+        'contract_myid': myIdInitial,
+        'proof_type': proofType,
+        'contract_address': contractAddress,
+        'gas_limit': gasLimit,
+        'force_query': forceQuery
+      }
       if (bridgeUtil.checkErrors(data) === true) {
         logger.error('HTTP query error', bridgeUtil.getQueryError(data))
         clearInterval(interval)
@@ -901,7 +927,9 @@ function checkQueryStatus (myid, myIdInitial, contractAddress, proofType, gasLim
           if (queryResultWithError !== null) dataResult = queryResultWithError
           if (queryProofWithError !== null) proofResult = bridgeUtil.getProof(queryProofWithError, proofType)
         }
-        queryComplete(gasLimit, myIdInitial, dataResult, proofResult, contractAddress, proofType)
+        queryComplObj.result = dataResult
+        queryComplObj.proof_content = proofResult
+        queryComplete(queryComplObj)
         return
       }
       if (!('checks' in data.result)) return
@@ -912,19 +940,29 @@ function checkQueryStatus (myid, myIdInitial, contractAddress, proofType, gasLim
       if (bridgeUtil.containsProof(proofType)) {
         dataProof = bridgeUtil.getProof(data.result.checks[data.result.checks.length - 1]['proofs'][0], proofType)
       }
-      queryComplete(gasLimit, myIdInitial, dataRes, dataProof, contractAddress, proofType)
+      queryComplObj.result = dataRes
+      queryComplObj.proof_content = dataProof
+      queryComplete(queryComplObj)
     })
   }, 5000)
 }
 
-function queryComplete (gasLimit, myid, result, proof, contractAddr, proofType) {
+function queryComplete (queryComplObj) {
   try {
+    var result = queryComplObj.result
+    var proof = queryComplObj.proof_content
+    var contractAddr = queryComplObj.contract_address
+    var proofType = queryComplObj.proof_type
+    var myid = queryComplObj.contract_myid
+    var gasLimit = queryComplObj.gas_limit
+
     if (typeof gasLimit === 'undefined' || typeof myid === 'undefined' || typeof contractAddr === 'undefined' || typeof proofType === 'undefined') {
       return queryCompleteErrors('queryComplete error, __callback arguments are empty')
     }
+
     checkCallbackTx(myid, function (findErr, alreadyCalled) {
       if (findErr !== null) return queryCompleteErrors(findErr)
-      if (alreadyCalled === true) return queryCompleteErrors('queryComplete error, __callback for contract myid', myid, 'was already called before, skipping...')
+      if (alreadyCalled === true) return logger.error('queryComplete error, __callback for contract myid', myid, 'was already called before, skipping...')
       var callbackObj = {
         'myid': myid,
         'result': result,
@@ -934,19 +972,22 @@ function queryComplete (gasLimit, myid, result, proof, contractAddr, proofType) 
         'gas_limit': gasLimit
       }
       logger.info('sending __callback tx...', {'contract_myid': callbackObj.myid, 'contract_address': callbackObj.contract_address})
-      activeOracleInstance.__callback(callbackObj, function (err, contract) {
-        var callbackObj = {'myid': myid, 'result': result, 'proof': proof}
-        if (err) {
-          updateQuery(callbackObj, null, err)
-          return logger.error('callback tx error, contract myid: ' + myid, err)
-        }
-        logger.info('contract ' + contractAddr + ' __callback tx sent, transaction hash:', contract.transactionHash, callbackObj)
-        updateQuery(callbackObj, contract, null)
-      })
+      queue.push(callbackObj)
     })
   } catch (e) {
     logger.error('queryComplete error ', e)
   }
+}
+
+function __callbackWrapper (callbackObj, cb) {
+  activeOracleInstance.__callback(callbackObj, function (err, contract) {
+    if (err) {
+      updateQuery(callbackObj, null, err, cb)
+      return logger.error('callback tx error, contract myid: ' + callbackObj.myid, err)
+    }
+    logger.info('contract ' + callbackObj.contract_address + ' __callback tx sent, transaction hash:', contract.transactionHash, callbackObj)
+    updateQuery(callbackObj, contract, null, cb)
+  })
 }
 
 function checkCallbackTx (myid, callback) {
@@ -955,8 +996,16 @@ function checkCallbackTx (myid, callback) {
     if (err) return callback(err, null)
     if (res === null) return callback(new Error('queryComplete error, query with contract myid ' + myid + ' not found in database'), null)
     if (typeof res.callback_complete === 'undefined') return callback(new Error('queryComplete error, query with contract myid ' + myid), null)
-    if (res.callback_complete === true) return callback(null, true)
-    else return callback(null, false)
+    CallbackTx.findOne({where: {'contract_myid': myid}}, function (errC, resC) {
+      if (resC !== null) {
+        if (resC.tx_hash !== null) var txContent = BlockchainInterface().inter.getTransactionReceipt(resC.tx_hash)
+        if (typeof resC.tx_confirmed !== 'undefined') {
+          if (resC.tx_confirmed === false && txContent !== null) return callback(null, true)
+          else return callback(null, false)
+        }
+      } else if (res.callback_complete === true) return callback(null, true)
+      else return callback(null, false)
+    })
     /* else {
       var eventTx = BlockchainInterface().inter.getTransaction(res.event_tx)
       if (eventTx === null || eventTx.blockHash === null || eventTx.blockHash !== res.block_tx_hash) return callback(new Error('queryComplete error, query with contract myid ' + myid + ' mismatch with block hash stored'), null)
@@ -966,7 +1015,7 @@ function checkCallbackTx (myid, callback) {
 }
 
 function manageErrors (err) {
-  if (err.message.match(/Invalid JSON RPC response/)) {
+  if (typeof err !== 'undefined' && typeof err.message !== 'undefined' && err.message.match(/Invalid JSON RPC response/)) {
     clearInterval(reorgInterval)
     // retry after 1 minute
     logger.warn('JSON RPC error, trying to re-connect every 30 seconds')
@@ -1006,54 +1055,100 @@ function queryCompleteErrors (err) {
   }
 }
 
-function updateQuery (callbackInfo, contract, errors) {
+function updateQuery (callbackInfo, contract, errors, callback) {
   var dataDbUpdate = {}
   if (errors !== null) {
-    dataDbUpdate = {'query_active': false, 'callback_complete': false, '$inc': {'retry_number': 1}}
+    dataDbUpdate = {'query_active': false, 'callback_complete': false, 'retry_number': 3}
     if (!errors.message.match(/Invalid JSON RPC response/)) dataDbUpdate.callback_error = true
   } else {
     dataDbUpdate = {'query_active': false, 'callback_complete': true}
   }
-  Query.update({where: {'contract_myid': callbackInfo.myid}}, dataDbUpdate, function (err, res) {
+  Query.update({where: {'contract_myid': callbackInfo.myid}}, {'$set': dataDbUpdate}, function (err, res) {
     if (err) logger.error('queries database update failed for query with contract myid', callbackInfo.myid)
     if (contract === null) {
+      setTimeout(function () {
+        callback()
+      }, 600)
       return logger.error('transaction hash not found, callback tx database not updated', contract)
     }
-    CallbackTx.create({'contract_myid': callbackInfo.myid, 'tx_hash': contract.transactionHash, 'contract_address': contract.to, 'result': callbackInfo.result, 'proof': callbackInfo.proof, 'gas_limit': contract.gasUsed, 'errors': errors}, function (err, res) {
+    CallbackTx.updateOrCreate({'contract_myid': callbackInfo.myid}, {'timestamp_db': moment().format('x'), 'oar': activeOracleInstance.oar, 'cbAddress': activeOracleInstance.account, 'connector': activeOracleInstance.connector, 'contract_myid': callbackInfo.myid, 'tx_hash': contract.transactionHash, 'contract_address': contract.to, 'result': callbackInfo.result, 'proof': callbackInfo.proof, 'gas_limit': contract.gasUsed, 'errors': errors}, function (err, res) {
       if (err) logger.error('failed to add a new transaction to database', err)
+      setTimeout(function () {
+        callback()
+      }, 600)
     })
   })
 }
 
 function createQuery (query, callback) {
   request.post('https://api.oraclize.it/v1/query/create', {body: query, json: true, headers: { 'X-User-Agent': BRIDGE_NAME + '/' + BRIDGE_VERSION + ' (nodejs)' }}, function (error, response, body) {
-    if (error) {
+    if (error || (response.statusCode !== 200 && response.statusCode !== 401)) {
       logger.error('HTTP query create request error ', error)
-      logger.info('re-trying to create the query again in 5 seconds...')
-      schedule.scheduleJob(moment().add(5, 'seconds').toDate(), function () {
-        var newTime = bridgeUtil.toPositiveNumber(query.when - 5)
+      logger.info('re-trying to create the query again in 20 seconds...')
+      schedule.scheduleJob(moment().add(20, 'seconds').toDate(), function () {
+        var newTime = bridgeUtil.toPositiveNumber(query.when - 20)
         query.when = newTime
         createQuery(query, callback)
       })
     } else {
       if (response.statusCode === 200) {
         callback(body)
-      } else logger.error('UNEXPECTED ANSWER FROM THE ORACLIZE ENGINE, PLEASE UPGRADE TO THE LATEST ' + BRIDGE_NAME.toUpperCase())
+      } else if (response.statusCode === 401) return logger.error('UNEXPECTED ANSWER FROM THE ORACLIZE ENGINE, PLEASE UPGRADE TO THE LATEST ' + BRIDGE_NAME.toUpperCase())
     }
   })
 }
 
 function queryStatus (queryId, callback) {
   request.get('https://api.oraclize.it/v1/query/' + queryId + '/status', {json: true, headers: { 'X-User-Agent': BRIDGE_NAME + '/' + BRIDGE_VERSION + ' (nodejs)' }}, function (error, response, body) {
-    if (error) {
+    if (error || (response.statusCode !== 200 && response.statusCode !== 401)) {
       logger.error('HTTP query status request error ', error)
       callback({'result': {}, 'bridge_request_error': true})
     } else {
       if (response.statusCode === 200) {
         callback(body)
-      } else logger.error('UNEXPECTED ANSWER FROM THE ORACLIZE ENGINE, PLEASE UPGRADE TO THE LATEST ' + BRIDGE_NAME.toUpperCase())
+      } else if (response.statusCode === 401) return logger.error('UNEXPECTED ANSWER FROM THE ORACLIZE ENGINE, PLEASE UPGRADE TO THE LATEST ' + BRIDGE_NAME.toUpperCase())
     }
   })
+}
+
+function checkCallbackTxs () {
+  setInterval(function () {
+    if (!activeOracleInstance.oar || !activeOracleInstance.account || !activeOracleInstance.connector) return
+    if (BlockchainInterface().isConnected() && BlockchainInterface().inter.syncing === false) {
+      CallbackTx.find({'where': {'tx_confirmed': false, 'oar': activeOracleInstance.oar, 'cbAddress': activeOracleInstance.account}}, function (err, res) {
+        if (err) return logger.error('failed to fetch callback tx', err)
+        if (res.length === 0) return
+        asyncLoop(res, function (transaction, next) {
+          if (transaction.tx_hash === null) return next(null)
+          var txContent = BlockchainInterface().inter.getTransactionReceipt(transaction.tx_hash)
+          if (txContent !== null) {
+            var newCallbackUpdate = {'$set': {'tx_confirmed': true, 'tx_confirmed_block_hash': txContent.blockHash}}
+            CallbackTx.update({where: {'tx_hash': transaction.tx_hash}}, newCallbackUpdate, function (errUpdate, resUpdate) {
+              if (errUpdate) return next(errUpdate)
+              logger.info('transaction hash', transaction.tx_hash, 'was confirmed in block', txContent.blockHash)
+              return next(null)
+            })
+          } else if ((moment().format('x') - transaction.timestamp_db) > 300000) {
+            Query.findOne({where: {'contract_myid': transaction.contract_myid}}, function (errQuery, contractInfo) {
+              if (errQuery) return next(errQuery)
+              txContent = BlockchainInterface().inter.getTransactionReceipt(transaction.tx_hash) // check again
+              if (contractInfo === null || txContent !== null) return next(null)
+              logger.warn('__callback transaction', transaction.tx_hash, 'not confirmed after 5 minutes, resuming query with contract myid', contractInfo.contract_myid)
+              contractInfo.force_query = true
+              CallbackTx.update({where: {'tx_hash': transaction.tx_hash}}, {'$set': {'timestamp_db': moment().format('x')}}, function (errUpdate, resUpdate) {
+                setTimeout(function () {
+                  checkQueryStatus(contractInfo)
+                  return next(null)
+                }, 1000)
+              })
+            })
+          } else return next(null)
+        }, function (err) {
+          if (err) logger.error('check callback txs error', err)
+        })
+      })
+    }
+  }, 60000)
 }
 
 process.on('exit', function () {
