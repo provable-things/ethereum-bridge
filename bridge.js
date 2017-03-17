@@ -956,15 +956,13 @@ function queryComplete (queryComplObj) {
     var myid = queryComplObj.contract_myid
     var gasLimit = queryComplObj.gas_limit
 
-    var forceQuery = queryComplObj.force_query || false
-
     if (typeof gasLimit === 'undefined' || typeof myid === 'undefined' || typeof contractAddr === 'undefined' || typeof proofType === 'undefined') {
       return queryCompleteErrors('queryComplete error, __callback arguments are empty')
     }
 
     checkCallbackTx(myid, function (findErr, alreadyCalled) {
       if (findErr !== null) return queryCompleteErrors(findErr)
-      if (alreadyCalled === true && forceQuery === false) return logger.error('queryComplete error, __callback for contract myid', myid, 'was already called before, skipping...')
+      if (alreadyCalled === true) return logger.error('queryComplete error, __callback for contract myid', myid, 'was already called before, skipping...')
       var callbackObj = {
         'myid': myid,
         'result': result,
@@ -999,8 +997,13 @@ function checkCallbackTx (myid, callback) {
     if (res === null) return callback(new Error('queryComplete error, query with contract myid ' + myid + ' not found in database'), null)
     if (typeof res.callback_complete === 'undefined') return callback(new Error('queryComplete error, query with contract myid ' + myid), null)
     CallbackTx.findOne({where: {'contract_myid': myid}}, function (errC, resC) {
-      if (resC !== null && typeof resC.tx_confirmed !== 'undefined' && resC.tx_confirmed === false && BlockchainInterface().inter.getTransactionReceipt(resC.tx_hash) !== null) return callback(null, true)
-      else if (res.callback_complete === true) return callback(null, true)
+      if (resC !== null) {
+        if (resC.tx_hash !== null) var txContent = BlockchainInterface().inter.getTransactionReceipt(resC.tx_hash)
+        if (typeof resC.tx_confirmed !== 'undefined') {
+          if (resC.tx_confirmed === false && txContent !== null) return callback(null, true)
+          else return callback(null, false)
+        }
+      } else if (res.callback_complete === true) return callback(null, true)
       else return callback(null, false)
     })
     /* else {
@@ -1063,12 +1066,16 @@ function updateQuery (callbackInfo, contract, errors, callback) {
   Query.update({where: {'contract_myid': callbackInfo.myid}}, {'$set': dataDbUpdate}, function (err, res) {
     if (err) logger.error('queries database update failed for query with contract myid', callbackInfo.myid)
     if (contract === null) {
-      callback()
+      setTimeout(function () {
+        callback()
+      }, 600)
       return logger.error('transaction hash not found, callback tx database not updated', contract)
     }
     CallbackTx.updateOrCreate({'contract_myid': callbackInfo.myid}, {'timestamp_db': moment().format('x'), 'oar': activeOracleInstance.oar, 'cbAddress': activeOracleInstance.account, 'connector': activeOracleInstance.connector, 'contract_myid': callbackInfo.myid, 'tx_hash': contract.transactionHash, 'contract_address': contract.to, 'result': callbackInfo.result, 'proof': callbackInfo.proof, 'gas_limit': contract.gasUsed, 'errors': errors}, function (err, res) {
       if (err) logger.error('failed to add a new transaction to database', err)
-      callback()
+      setTimeout(function () {
+        callback()
+      }, 600)
     })
   })
 }
