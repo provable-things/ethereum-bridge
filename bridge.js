@@ -1132,7 +1132,7 @@ function checkCallbackTxs () {
                 setTimeout(function () {
                   checkQueryStatus(contractInfo)
                   return next(null)
-                }, 500)
+                }, 1000)
               })
             })
           } else return next(null)
