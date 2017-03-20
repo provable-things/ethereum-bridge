@@ -11,6 +11,7 @@ var bridgeCore = require('./lib/bridge-core')
 var BridgeAccount = require('./lib/bridge-account')
 var BlockchainInterface = require('./lib/blockchain-interface')
 var BridgeLogManager = require('./lib/bridge-log-manager')
+var BridgeStats = require('./lib/bridge-stats')
 var BridgeDbManager = require('./lib/bridge-db-manager').BridgeDbManager
 var BridgeLogEvents = BridgeLogManager.events
 var winston = require('winston')
@@ -501,6 +502,7 @@ function userWarning () {
 function checkNodeConnection () {
   if (!BlockchainInterface().isConnected()) nodeError()
   else {
+    BridgeStats(logger)
     var nodeType = BlockchainInterface().version.node
     isTestRpc = !!nodeType.match(/TestRPC/i)
     logger.info('connected to node type', nodeType)
