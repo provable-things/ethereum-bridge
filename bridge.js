@@ -29,7 +29,10 @@ var activeOracleInstance
 var colorMap = {
   'info': 'cyan',
   'warn': 'yellow',
-  'error': 'red'
+  'error': 'red',
+  'verbose': 'magenta',
+  'debug': 'bgYellow',
+  'stats': 'bgBlue'
 }
 
 function colorize (string) {
@@ -116,7 +119,10 @@ var ops = stdio.getopt({
   'from': {args: 1, description: 'fromBlock (number) to resume logs (--to is required)'},
   'to': {args: 1, description: 'toBlock (number) to resume logs (--from is required)'},
   'resume': {description: 'resume all skipped queries (note: retries will not be counted/updated)'},
-  'skip': {description: 'skip all pending queries (note: retries will not be counted/updated)'}
+  'skip': {description: 'skip all pending queries (note: retries will not be counted/updated)'},
+  'loglevel': {args: 1, description: 'specify the log level', default: 'info'},
+  'non-interactive': {description: 'run in non interactive mode', default: false},
+  'no-hints': {description: 'disable hints', default: false}
 })
 
 console.log('Please wait...')
@@ -131,10 +137,27 @@ if (ops.logfile) {
   logFilePath = './bridge.log'
 }
 
+var logLevels = {
+  error: 0,
+  warn: 1,
+  info: 2,
+  verbose: 3,
+  debug: 4,
+  stats: 5
+}
+
+function setLogLevel (level) {
+  level = level.toLowerCase()
+  if (Object.keys(logLevels).indexOf(level) === -1) throw new Error('Invalid log level')
+  return level
+}
+
 var logger = new (winston.Logger)({
+  levels: logLevels,
   transports: [
     new (winston.transports.Console)({
       colorize: true,
+      level: setLogLevel(ops.loglevel),
       timestamp: function () {
         return moment().toISOString()
       },
@@ -148,6 +171,8 @@ var logger = new (winston.Logger)({
     })
   ]
 })
+
+logger.debug('parsed options', ops)
 
 if (ops.from && ops.to) {
   if (ops.to === 'latest' || ops.from === 'latest') throw new Error('latest is not allowed')
@@ -213,8 +238,10 @@ if (ops.broadcast) {
       if (!ops.account) ops.account = 0
     } else if (ops.account) {
       ops.new = true
-      logger.error('no account', ops.account, 'found in your keys.json file, automatically removing the -a option...')
-      ops.account = null
+      if (ops['non-interactive'] === false) {
+        logger.error('no account', ops.account, 'found in your keys.json file, automatically removing the -a option...')
+        ops.account = null
+      }
     }
   } catch (err) {
     if (err.code === 'ENOENT') {
@@ -323,6 +350,7 @@ function oracleFromConfig (config) {
       config.onchain_config.pricing = pricingInfo
       config.onchain_config.base_price = basePrice
     }
+    logger.debug('configuration file', config)
     activeOracleInstance = new OracleInstance(config)
     checkNodeConnection()
     activeOracleInstance.isValidOracleInstance()
@@ -354,6 +382,7 @@ function oracleFromConfig (config) {
 
     if (!ops.newconn) runLog()
     else {
+      if (ops['non-interactive'] === true) throw new Error('new connector is not available in non-interactive mode')
       var rl = readline.createInterface({
         input: process.stdin,
         output: process.stdout
@@ -560,7 +589,7 @@ function deployOraclize () {
       var amountToPay = 500000000000000000 - accountBalance
       if (amountToPay > 0) {
         logger.warn(activeOracleInstance.account, 'doesn\'t have enough funds to cover transaction costs, please send at least ' + parseFloat(amountToPay / 1e19) + ' ' + BLOCKCHAIN_BASE_UNIT)
-        if (BlockchainInterface().version.node.match(/TestRPC/i)) {
+        if (isTestRpc && ops['non-interactive'] === false) {
           // node is TestRPC
           var rl = readline.createInterface({
             input: process.stdin,
@@ -681,7 +710,7 @@ function runLog () {
 
   if (isTestRpc && !ops.dev) {
     logger.warn('re-org block listen is disabled while using TestRPC')
-    logger.warn('if you are running a test suit with Truffle and TestRPC or your chain is reset often please use the --dev mode')
+    if (ops['no-hints'] === false) logger.warn('if you are running a test suit with Truffle and TestRPC or your chain is reset often please use the --dev mode')
   }
 
   if (ops.dev) logger.warn('re-org block listen is disabled in --dev mode')
