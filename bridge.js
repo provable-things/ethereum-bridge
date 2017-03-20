@@ -298,6 +298,7 @@ if (ops.abiconn || ops.abioar) {
 if (ops.instance) {
   var instanceToLoad = ops.instance
   var instances = getInstances()
+  logger.debug('instances found', instances)
   if (instances.length === 0) throw new Error('no instance files found')
   if (instanceToLoad !== 'latest' && instanceToLoad.indexOf('.json') === -1) {
     instanceToLoad += '.json'
@@ -536,6 +537,7 @@ function nodeError () {
 
 function checkBridgeVersion (callback) {
   request.get('https://api.oraclize.it/v1/platform/info', {json: true, headers: { 'X-User-Agent': BRIDGE_NAME + '/' + BRIDGE_VERSION + ' (nodejs)' }}, function (error, response, body) {
+    logger.debug('check bridge version body result', body)
     if (error) return callback(error, null)
     try {
       if (response.statusCode === 200) {
@@ -634,6 +636,7 @@ function deployOraclize () {
           var amountToPay = 500000000000000000 - balance
           if (amountToPay <= 0) {
             logger.info('received funds')
+            logger.debug('account balance', balance)
             clearInterval(checkBalance)
             if (typeof rl !== 'undefined') rl.close()
             callback(null, true)
@@ -647,6 +650,7 @@ function deployOraclize () {
     },
     function deployOAR (result, callback) {
       logger.info('connector deployed to:', result.connector)
+      logger.debug('connector deployment result', result)
       if (deterministicOar === true && BlockchainInterface().getAccountNonce(BridgeAccount().getTempAddress()) === 0) logger.info('deploying the address resolver with a deterministic address...')
       else {
         logger.warn('deterministic OAR disabled/not available, please update your contract with the new custom address generated')
@@ -657,6 +661,7 @@ function deployOraclize () {
     function setPricing (result, callback) {
       oraclizeConfiguration.oar = result.oar
       logger.info('address resolver (OAR) deployed to:', oraclizeConfiguration.oar)
+      logger.debug('OAR deployment result', result)
       if (ops['disable-price'] === true || pricingInfo.length === 0 || basePrice <= 0) {
         logger.warn('skipping pricing update...')
         callback(null, null)
@@ -668,8 +673,10 @@ function deployOraclize () {
   ], function (err, result) {
     if (err) throw new Error(err)
     logger.info('successfully deployed all contracts')
+    logger.debug('pricing update result', result)
     oraclizeConfiguration.connector = activeOracleInstance.connector
     oraclizeConfiguration.account = activeOracleInstance.account
+    logger.debug('new oracle inline configuration', oraclizeConfiguration)
     var oraclizeInstanceNewName = 'oracle_instance_' + moment().format('YYYYMMDDTHHmmss') + '.json'
     configFilePath = toFullPath('./config/instance/' + oraclizeInstanceNewName)
     currentInstance = oraclizeInstanceNewName
@@ -697,15 +704,18 @@ function checkVersion () {
 }
 
 function runLog () {
-  if (officialOar.length === 1) logger.info('an "official" Oraclize address resolver was found on your blockchain:', officialOar[0], 'you can use that instead and quit the bridge')
+  if (officialOar.length === 1 && ops['no-hints'] === false) logger.info('an "official" Oraclize address resolver was found on your blockchain:', officialOar[0], 'you can use that instead and quit the bridge')
 
   var checksumOar = bridgeCore.ethUtil.toChecksumAddress(activeOracleInstance.oar)
   if (checksumOar === '0x6f485C8BF6fc43eA212E93BBF8ce046C7f1cb475' && !isTestRpc) logger.info('you are using a deterministic OAR, you don\'t need to update your contract')
   else console.log('\nPlease add this line to your contract constructor:\n\n' + 'OAR = OraclizeAddrResolverI(' + checksumOar + ');\n')
 
+  logger.debug('starting the bridge log manager...')
   BridgeLogManager = BridgeLogManager.init()
 
   var latestBlockMemory = activeOracleInstance.latestBlockNumber
+
+  logger.debug('latest block seen (config file)', latestBlockMemory)
 
   // listen for latest events
   listenToLogs()
@@ -1113,6 +1123,7 @@ function updateQuery (callbackInfo, contract, errors, callback) {
 
 function createQuery (query, callback) {
   request.post('https://api.oraclize.it/v1/query/create', {body: query, json: true, headers: { 'X-User-Agent': BRIDGE_NAME + '/' + BRIDGE_VERSION + ' (nodejs)' }}, function (error, response, body) {
+    logger.debug('oraclize HTTP create query body response', body)
     if (error || (response.statusCode !== 200 && response.statusCode !== 401)) {
       logger.error('HTTP query create request error ', error)
       logger.info('re-trying to create the query again in 20 seconds...')
@@ -1191,7 +1202,7 @@ process.on('exit', function () {
     var oracleInstanceTemp = JSON.parse(fs.readFileSync(oracleInstancePath).toString())
     oracleInstanceTemp.latest_block_number = activeOracleInstance.latestBlockNumber
     fs.writeFileSync(oracleInstancePath, JSON.stringify(oracleInstanceTemp, null, 4))
-    console.log('To load this instance again: node bridge --instance ' + currentInstance)
+    if (ops['no-hints'] === false) console.log('To load this instance again: node bridge --instance ' + currentInstance)
   }
   console.log('Exiting...')
 })
