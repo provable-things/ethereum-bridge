@@ -467,7 +467,7 @@ function processPendingQueries (oar, connector, cbAddress) {
 function importConfigFile (instanceToLoad) {
   configFilePath = toFullPath('./config/instance/' + instanceToLoad)
   loadConfigFile(configFilePath)
-  logger.info('using ' + instanceToLoad + ' oracle configuration file')
+  if (ops['no-hints'] === false) logger.info('using ' + instanceToLoad + ' oracle configuration file')
 }
 
 function loadConfigFile (file) {
@@ -497,7 +497,7 @@ function startUpLog (newInstance, configFile) {
 }
 
 function userWarning () {
-  logger.warn('Using', activeOracleInstance.account, 'to query contracts on your blockchain, make sure it is unlocked and do not use the same address to deploy your contracts')
+  if (ops['no-hints'] === false) logger.warn('Using', activeOracleInstance.account, 'to query contracts on your blockchain, make sure it is unlocked and do not use the same address to deploy your contracts')
 }
 
 function checkNodeConnection () {
@@ -720,9 +720,9 @@ function runLog () {
   // listen for latest events
   listenToLogs()
 
-  if (isTestRpc && !ops.dev) {
+  if (isTestRpc && !ops.dev && ops['no-hints'] === false) {
     logger.warn('re-org block listen is disabled while using TestRPC')
-    if (ops['no-hints'] === false) logger.warn('if you are running a test suit with Truffle and TestRPC or your chain is reset often please use the --dev mode')
+    logger.warn('if you are running a test suit with Truffle and TestRPC or your chain is reset often please use the --dev mode')
   }
 
   if (ops.dev) logger.warn('re-org block listen is disabled in --dev mode')
