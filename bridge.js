@@ -247,7 +247,7 @@ if (ops.broadcast) {
   } catch (err) {
     if (err.code === 'ENOENT') {
       ops.new = true
-      logger.warn('keys.json not found, creating the new file', keyFilePath)
+      if (ops['no-hints'] === false) logger.warn('keys.json not found, creating the new file', keyFilePath)
       try {
         bridgeUtil.saveJsonFile(keyFilePath, JSON.stringify([]))
       } catch (e) {
@@ -653,7 +653,7 @@ function deployOraclize () {
       logger.debug('connector deployment result', result)
       if (deterministicOar === true && BlockchainInterface().getAccountNonce(BridgeAccount().getTempAddress()) === 0) logger.info('deploying the address resolver with a deterministic address...')
       else {
-        logger.warn('deterministic OAR disabled/not available, please update your contract with the new custom address generated')
+        if (ops['no-hints'] === false) logger.warn('deterministic OAR disabled/not available, please update your contract with the new custom address generated')
         logger.info('deploying the address resolver contract...')
       }
       activeOracleInstance.deployOAR(callback)
@@ -682,9 +682,9 @@ function deployOraclize () {
     currentInstance = oraclizeInstanceNewName
     try {
       bridgeUtil.saveJsonFile(configFilePath, oraclizeConfiguration)
-      logger.info('instance configuration file saved to ' + configFilePath)
+      if (ops['no-hints'] === false) logger.info('instance configuration file saved to ' + configFilePath)
     } catch (err) {
-      logger.error('instance configuration file ' + configFilePath + ' not saved', err)
+      if (ops['no-hints'] === false) logger.error('instance configuration file ' + configFilePath + ' not saved', err)
     }
     runLog()
   })
