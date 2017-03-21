@@ -115,6 +115,8 @@ var ops = stdio.getopt({
   'update-price': {description: 'Update base price (pricing is taken from the oracle instance configuration file)'},
   'remote-price': {description: 'Use the remote API to get the pricing info'},
   'disable-price': {description: 'Disable pricing'},
+  'price-usd': {args: 1, description: 'Set ' + BLOCKCHAIN_BASE_UNIT + '/USD base price (USD price per 1 ' + BLOCKCHAIN_BASE_UNIT + ')'},
+  'price-update-interval': {args: 1, description: 'Set base price update interval in seconds'},
   // 'changeconn': {args:1, description: 'Provide a connector address and update the OAR with the new connector address'},
   'loadabi': {description: 'Load default abi interface (under ' + BRIDGE_NAME + '/contracts/abi)'},
   'from': {args: 1, description: 'fromBlock (number) to resume logs (--to is required)'},
@@ -182,6 +184,10 @@ if (ops.from && ops.to) {
   logger.info('block range to resume:', JSON.stringify(blockRangeResume))
 } else if (ops.from && !ops.to) throw new Error('--from flag requires the --to flag')
 else if (!ops.from && ops.to) throw new Error('--to flag requires the --from flag')
+
+if (ops['price-usd'] < 0) throw new Error('Base price should be above or equal to 0')
+
+if (ops['price-update-interval'] <= 9) throw new Error('Price update interval should be above 9')
 
 if (ops.confirmation) {
   if (ops.confirmation <= 0) throw new Error('confirmations must be > 0')
@@ -257,6 +263,7 @@ if (ops.broadcast) {
   }
 }
 
+logger.info('you are running ' + BRIDGE_NAME, '- version: ' + BRIDGE_VERSION)
 logger.info('saving logs to:', logFilePath)
 
 var deterministicOar = true
@@ -730,6 +737,16 @@ function runLog () {
 
   logger.info('Listening @ ' + activeOracleInstance.connector + ' (Oraclize Connector)\n')
 
+  if (ops['price-usd']) {
+    var priceInUsd = 1 / ops['price-usd']
+    activeOracleInstance.setBasePrice(activeOracleInstance.connector, priceInUsd, function (err, res) {
+      if (err) return logger.error('update price error', err)
+      else logger.info('base price updated to', priceInUsd, BLOCKCHAIN_BASE_UNIT)
+    })
+  }
+
+  if (ops['price-update-interval'] && ops['price-usd']) priceUpdater(ops['price-update-interval'])
+
   keepNodeAlive()
 
   console.log('(Ctrl+C to exit)\n')
@@ -755,6 +772,18 @@ function runLog () {
   }
 
   if (!isTestRpc && !ops.dev) checkCallbackTxs()
+}
+
+function priceUpdater (seconds) {
+  setInterval(function () {
+    if (BlockchainInterface().isConnected() && BlockchainInterface().inter.syncing === false) {
+      var priceInUsd = 1 / ops['price-usd']
+      activeOracleInstance.setBasePrice(activeOracleInstance.connector, priceInUsd, function (err, res) {
+        if (err) return logger.error('update price error', err)
+        else logger.info('base price updated to', priceInUsd, BLOCKCHAIN_BASE_UNIT)
+      })
+    }
+  }, seconds * 1000)
 }
 
 function processQueryInFuture (date, query) {
