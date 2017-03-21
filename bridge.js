@@ -11,6 +11,7 @@ var bridgeCore = require('./lib/bridge-core')
 var BridgeAccount = require('./lib/bridge-account')
 var BlockchainInterface = require('./lib/blockchain-interface')
 var BridgeLogManager = require('./lib/bridge-log-manager')
+var BridgeStats = require('./lib/bridge-stats')
 var BridgeDbManager = require('./lib/bridge-db-manager').BridgeDbManager
 var BridgeLogEvents = BridgeLogManager.events
 var winston = require('winston')
@@ -29,7 +30,10 @@ var activeOracleInstance
 var colorMap = {
   'info': 'cyan',
   'warn': 'yellow',
-  'error': 'red'
+  'error': 'red',
+  'verbose': 'magenta',
+  'debug': 'bgYellow',
+  'stats': 'bgBlue'
 }
 
 function colorize (string) {
@@ -116,7 +120,10 @@ var ops = stdio.getopt({
   'from': {args: 1, description: 'fromBlock (number) to resume logs (--to is required)'},
   'to': {args: 1, description: 'toBlock (number) to resume logs (--from is required)'},
   'resume': {description: 'resume all skipped queries (note: retries will not be counted/updated)'},
-  'skip': {description: 'skip all pending queries (note: retries will not be counted/updated)'}
+  'skip': {description: 'skip all pending queries (note: retries will not be counted/updated)'},
+  'loglevel': {args: 1, description: 'specify the log level', default: 'info'},
+  'non-interactive': {description: 'run in non interactive mode', default: false},
+  'no-hints': {description: 'disable hints', default: false}
 })
 
 console.log('Please wait...')
@@ -131,10 +138,27 @@ if (ops.logfile) {
   logFilePath = './bridge.log'
 }
 
+var logLevels = {
+  error: 0,
+  warn: 1,
+  info: 2,
+  verbose: 3,
+  debug: 4,
+  stats: 5
+}
+
+function setLogLevel (level) {
+  level = level.toLowerCase()
+  if (Object.keys(logLevels).indexOf(level) === -1) throw new Error('Invalid log level')
+  return level
+}
+
 var logger = new (winston.Logger)({
+  levels: logLevels,
   transports: [
     new (winston.transports.Console)({
       colorize: true,
+      level: setLogLevel(ops.loglevel),
       timestamp: function () {
         return moment().toISOString()
       },
@@ -148,6 +172,8 @@ var logger = new (winston.Logger)({
     })
   ]
 })
+
+logger.debug('parsed options', ops)
 
 if (ops.from && ops.to) {
   if (ops.to === 'latest' || ops.from === 'latest') throw new Error('latest is not allowed')
@@ -213,13 +239,15 @@ if (ops.broadcast) {
       if (!ops.account) ops.account = 0
     } else if (ops.account) {
       ops.new = true
-      logger.error('no account', ops.account, 'found in your keys.json file, automatically removing the -a option...')
-      ops.account = null
+      if (ops['non-interactive'] === false) {
+        logger.error('no account', ops.account, 'found in your keys.json file, automatically removing the -a option...')
+        ops.account = null
+      }
     }
   } catch (err) {
     if (err.code === 'ENOENT') {
       ops.new = true
-      logger.warn('keys.json not found, creating the new file', keyFilePath)
+      if (ops['no-hints'] === false) logger.warn('keys.json not found, creating the new file', keyFilePath)
       try {
         bridgeUtil.saveJsonFile(keyFilePath, JSON.stringify([]))
       } catch (e) {
@@ -270,6 +298,7 @@ if (ops.abiconn || ops.abioar) {
 if (ops.instance) {
   var instanceToLoad = ops.instance
   var instances = getInstances()
+  logger.debug('instances found', instances)
   if (instances.length === 0) throw new Error('no instance files found')
   if (instanceToLoad !== 'latest' && instanceToLoad.indexOf('.json') === -1) {
     instanceToLoad += '.json'
@@ -323,6 +352,7 @@ function oracleFromConfig (config) {
       config.onchain_config.pricing = pricingInfo
       config.onchain_config.base_price = basePrice
     }
+    logger.debug('configuration file', config)
     activeOracleInstance = new OracleInstance(config)
     checkNodeConnection()
     activeOracleInstance.isValidOracleInstance()
@@ -354,6 +384,7 @@ function oracleFromConfig (config) {
 
     if (!ops.newconn) runLog()
     else {
+      if (ops['non-interactive'] === true) throw new Error('new connector is not available in non-interactive mode')
       var rl = readline.createInterface({
         input: process.stdin,
         output: process.stdout
@@ -436,7 +467,7 @@ function processPendingQueries (oar, connector, cbAddress) {
 function importConfigFile (instanceToLoad) {
   configFilePath = toFullPath('./config/instance/' + instanceToLoad)
   loadConfigFile(configFilePath)
-  logger.info('using ' + instanceToLoad + ' oracle configuration file')
+  if (ops['no-hints'] === false) logger.info('using ' + instanceToLoad + ' oracle configuration file')
 }
 
 function loadConfigFile (file) {
@@ -466,12 +497,13 @@ function startUpLog (newInstance, configFile) {
 }
 
 function userWarning () {
-  logger.warn('Using', activeOracleInstance.account, 'to query contracts on your blockchain, make sure it is unlocked and do not use the same address to deploy your contracts')
+  if (ops['no-hints'] === false) logger.warn('Using', activeOracleInstance.account, 'to query contracts on your blockchain, make sure it is unlocked and do not use the same address to deploy your contracts')
 }
 
 function checkNodeConnection () {
   if (!BlockchainInterface().isConnected()) nodeError()
   else {
+    BridgeStats(logger)
     var nodeType = BlockchainInterface().version.node
     isTestRpc = !!nodeType.match(/TestRPC/i)
     logger.info('connected to node type', nodeType)
@@ -505,6 +537,7 @@ function nodeError () {
 
 function checkBridgeVersion (callback) {
   request.get('https://api.oraclize.it/v1/platform/info', {json: true, headers: { 'X-User-Agent': BRIDGE_NAME + '/' + BRIDGE_VERSION + ' (nodejs)' }}, function (error, response, body) {
+    logger.debug('check bridge version body result', body)
     if (error) return callback(error, null)
     try {
       if (response.statusCode === 200) {
@@ -560,7 +593,7 @@ function deployOraclize () {
       var amountToPay = 500000000000000000 - accountBalance
       if (amountToPay > 0) {
         logger.warn(activeOracleInstance.account, 'doesn\'t have enough funds to cover transaction costs, please send at least ' + parseFloat(amountToPay / 1e19) + ' ' + BLOCKCHAIN_BASE_UNIT)
-        if (BlockchainInterface().version.node.match(/TestRPC/i)) {
+        if (isTestRpc && ops['non-interactive'] === false) {
           // node is TestRPC
           var rl = readline.createInterface({
             input: process.stdin,
@@ -603,6 +636,7 @@ function deployOraclize () {
           var amountToPay = 500000000000000000 - balance
           if (amountToPay <= 0) {
             logger.info('received funds')
+            logger.debug('account balance', balance)
             clearInterval(checkBalance)
             if (typeof rl !== 'undefined') rl.close()
             callback(null, true)
@@ -616,9 +650,10 @@ function deployOraclize () {
     },
     function deployOAR (result, callback) {
       logger.info('connector deployed to:', result.connector)
+      logger.debug('connector deployment result', result)
       if (deterministicOar === true && BlockchainInterface().getAccountNonce(BridgeAccount().getTempAddress()) === 0) logger.info('deploying the address resolver with a deterministic address...')
       else {
-        logger.warn('deterministic OAR disabled/not available, please update your contract with the new custom address generated')
+        if (ops['no-hints'] === false) logger.warn('deterministic OAR disabled/not available, please update your contract with the new custom address generated')
         logger.info('deploying the address resolver contract...')
       }
       activeOracleInstance.deployOAR(callback)
@@ -626,6 +661,7 @@ function deployOraclize () {
     function setPricing (result, callback) {
       oraclizeConfiguration.oar = result.oar
       logger.info('address resolver (OAR) deployed to:', oraclizeConfiguration.oar)
+      logger.debug('OAR deployment result', result)
       if (ops['disable-price'] === true || pricingInfo.length === 0 || basePrice <= 0) {
         logger.warn('skipping pricing update...')
         callback(null, null)
@@ -637,16 +673,18 @@ function deployOraclize () {
   ], function (err, result) {
     if (err) throw new Error(err)
     logger.info('successfully deployed all contracts')
+    logger.debug('pricing update result', result)
     oraclizeConfiguration.connector = activeOracleInstance.connector
     oraclizeConfiguration.account = activeOracleInstance.account
+    logger.debug('new oracle inline configuration', oraclizeConfiguration)
     var oraclizeInstanceNewName = 'oracle_instance_' + moment().format('YYYYMMDDTHHmmss') + '.json'
     configFilePath = toFullPath('./config/instance/' + oraclizeInstanceNewName)
     currentInstance = oraclizeInstanceNewName
     try {
       bridgeUtil.saveJsonFile(configFilePath, oraclizeConfiguration)
-      logger.info('instance configuration file saved to ' + configFilePath)
+      if (ops['no-hints'] === false) logger.info('instance configuration file saved to ' + configFilePath)
     } catch (err) {
-      logger.error('instance configuration file ' + configFilePath + ' not saved', err)
+      if (ops['no-hints'] === false) logger.error('instance configuration file ' + configFilePath + ' not saved', err)
     }
     runLog()
   })
@@ -666,20 +704,23 @@ function checkVersion () {
 }
 
 function runLog () {
-  if (officialOar.length === 1) logger.info('an "official" Oraclize address resolver was found on your blockchain:', officialOar[0], 'you can use that instead and quit the bridge')
+  if (officialOar.length === 1 && ops['no-hints'] === false) logger.info('an "official" Oraclize address resolver was found on your blockchain:', officialOar[0], 'you can use that instead and quit the bridge')
 
   var checksumOar = bridgeCore.ethUtil.toChecksumAddress(activeOracleInstance.oar)
   if (checksumOar === '0x6f485C8BF6fc43eA212E93BBF8ce046C7f1cb475' && !isTestRpc) logger.info('you are using a deterministic OAR, you don\'t need to update your contract')
   else console.log('\nPlease add this line to your contract constructor:\n\n' + 'OAR = OraclizeAddrResolverI(' + checksumOar + ');\n')
 
+  logger.debug('starting the bridge log manager...')
   BridgeLogManager = BridgeLogManager.init()
 
   var latestBlockMemory = activeOracleInstance.latestBlockNumber
 
+  logger.debug('latest block seen (config file)', latestBlockMemory)
+
   // listen for latest events
   listenToLogs()
 
-  if (isTestRpc && !ops.dev) {
+  if (isTestRpc && !ops.dev && ops['no-hints'] === false) {
     logger.warn('re-org block listen is disabled while using TestRPC')
     logger.warn('if you are running a test suit with Truffle and TestRPC or your chain is reset often please use the --dev mode')
   }
@@ -1082,6 +1123,7 @@ function updateQuery (callbackInfo, contract, errors, callback) {
 
 function createQuery (query, callback) {
   request.post('https://api.oraclize.it/v1/query/create', {body: query, json: true, headers: { 'X-User-Agent': BRIDGE_NAME + '/' + BRIDGE_VERSION + ' (nodejs)' }}, function (error, response, body) {
+    logger.debug('oraclize HTTP create query body response', body)
     if (error || (response.statusCode !== 200 && response.statusCode !== 401)) {
       logger.error('HTTP query create request error ', error)
       logger.info('re-trying to create the query again in 20 seconds...')
@@ -1160,7 +1202,7 @@ process.on('exit', function () {
     var oracleInstanceTemp = JSON.parse(fs.readFileSync(oracleInstancePath).toString())
     oracleInstanceTemp.latest_block_number = activeOracleInstance.latestBlockNumber
     fs.writeFileSync(oracleInstancePath, JSON.stringify(oracleInstanceTemp, null, 4))
-    console.log('To load this instance again: node bridge --instance ' + currentInstance)
+    if (ops['no-hints'] === false) console.log('To load this instance again: node bridge --instance ' + currentInstance)
   }
   console.log('Exiting...')
 })

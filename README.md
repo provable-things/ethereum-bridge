@@ -103,3 +103,6 @@ contract test() {
   * `--update-ds` : update datasource pricing only (pricing (if found) will be loaded from your local instance file, otherwise will be fetched from the remote oraclize API)
   * `--update-price` : update base price only (base price (if found) will be loaded from your local instance file, otherwise will be fetched from the remote oraclize API)
   * `--remote-price` : force the remote pricing fetch
+  * `--loglevel` : change the default log level (available: 'error', 'warn', 'info', 'verbose', 'debug', 'stats') default: 'info'
+  * `--non-interactive` : disable the interactive mode
+  * `--no-hints` : disable logs hints
