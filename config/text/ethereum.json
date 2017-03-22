@@ -3,5 +3,5 @@
 	"blockchain_name": "ethereum",
 	"base_unit": "ETH",
 	"bridge_name": "ethereum-bridge",
-	"connection_failed_tip": "if you are using:\n * geth, append: --rpc --rpccorsdomain='*' --rpcaddr='@HOST' --rpcport='@PORT'\n * parity, append: --geth --jsonrpc-hosts all --rpcaddr @HOST --rpcport @PORT \n * ethereumjs-testrpc, try: testrpc -H @HOST:@PORT\n\ncheck also if your node or this machine is allowed to connect (firewall, port, etc..)\n"
+	"connection_failed_tip": "if you are using:\n * geth, append: --rpc --rpccorsdomain='*' --rpcaddr='@HOST' --rpcport='@PORT'\n * parity, append: --geth --jsonrpc-hosts all --rpcaddr @HOST --rpcport @PORT \n * ethereumjs-testrpc, try: testrpc -h @HOST -p @PORT\n\ncheck also if your node or this machine is allowed to connect (firewall, port, etc..)\n"
 }
