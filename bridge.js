@@ -12,7 +12,8 @@ var BridgeAccount = require('./lib/bridge-account')
 var BlockchainInterface = require('./lib/blockchain-interface')
 var BridgeLogManager = require('./lib/bridge-log-manager')
 var BridgeStats = require('./lib/bridge-stats')
-var BridgeDbManager = require('./lib/bridge-db-manager').BridgeDbManager
+var BridgeDbManagerLib = require('./lib/bridge-db-manager')
+var BridgeDbManager = BridgeDbManagerLib.BridgeDbManager
 var BridgeLogEvents = BridgeLogManager.events
 var winston = require('winston')
 var colors = require('colors/safe')
@@ -71,11 +72,11 @@ BridgeDbManager(dbConfig)
 
 var Query = BridgeDbManager().Query
 var CallbackTx = BridgeDbManager().CallbackTx
+var BridgeCache = BridgeDbManager().cache
 
 var mode = 'active'
 var defaultnode = 'localhost:8545'
 var logFilePath = ''
-var myIdList = []
 var keyFilePath = toFullPath('./config/instance/keys.json')
 var configFilePath = ''
 var defaultGas = 3000000
@@ -125,6 +126,7 @@ var ops = stdio.getopt({
   'skip': {description: 'skip all pending queries (note: retries will not be counted/updated)'},
   'loglevel': {args: 1, description: 'specify the log level', default: 'info'},
   'non-interactive': {description: 'run in non interactive mode', default: false},
+  'enable-stats': {description: 'enable stats logging', default: false},
   'no-hints': {description: 'disable hints', default: false}
 })
 
@@ -510,7 +512,7 @@ function userWarning () {
 function checkNodeConnection () {
   if (!BlockchainInterface().isConnected()) nodeError()
   else {
-    BridgeStats(logger)
+    if (ops['enable-stats'] === true) BridgeStats(logger)
     var nodeType = BlockchainInterface().version.node
     isTestRpc = !!nodeType.match(/TestRPC/i)
     logger.info('connected to node type', nodeType)
@@ -840,7 +842,7 @@ function manageLog (data) {
   try {
     if (!('args' in data)) return logger.error('no args found in log', data)
     var contractMyid = data.args['cid']
-    isAlreadyProcessed(contractMyid, function (err, isProcessed) {
+    BridgeDbManager().isAlreadyProcessed(contractMyid, function (err, isProcessed) {
       if (err) isProcessed = false
       if (isProcessed === false) {
         if (activeOracleInstance.isOracleEvent(data)) {
@@ -855,35 +857,6 @@ function manageLog (data) {
   }
 }
 
-function isAlreadyProcessed (contractMyid, cb) {
-  if (ops.dev === true) return cb(null, false)
-  isAlreadyProcessedDb(contractMyid, function (err, isProcessed) {
-    if (err) return cb(err, null)
-    if (isProcessed === true) return cb(null, true)
-    else if (isProcessed === false && myIdList.indexOf(contractMyid) === -1) return cb(null, false)
-    else return cb(null, isProcessed)
-  })
-}
-
-function isAlreadyProcessedDb (contractMyid, cb) {
-  Query.findOne({where: {'contract_myid': contractMyid}}, function (err, query1) {
-    if (err) logger.error('Query database findOne error', err)
-    CallbackTx.findOne({where: {'contract_myid': contractMyid, 'tx_confirmed': false}}, function (err2, query2) {
-      if (err2 || err) {
-        logger.error('Callback database findOne error', err2, err)
-        return cb(new Error('database error'), false)
-      } else {
-        if (query2 !== null) {
-          if (typeof query2.tx_hash !== 'undefined' && query2.tx_hash.length > 0) return cb(null, true)
-        } else if (query1 !== null) {
-          if (typeof query1.callback_error !== 'undefined' && query1.callback_error === false && query1 === null) return cb(null, false)
-        } else if (query1 === null && query2 === null) cb(null, false)
-        else return cb(null, true)
-      }
-    })
-  })
-}
-
 function handleLog (data) {
   try {
     logger.info('new log ', data)
@@ -892,8 +865,8 @@ function handleLog (data) {
     var logObj = data
     data = logObj['args']
     var myIdInitial = data['cid']
-    if (ops.dev !== true && myIdList.indexOf(myIdInitial) > -1) return
-    myIdList.push(myIdInitial)
+    if (ops.dev !== true && BridgeCache.get(myIdInitial) === true) return
+    BridgeCache.set(myIdInitial, true)
     latestBlockNumber = BlockchainInterface().inter.blockNumber
     activeOracleInstance.latestBlockNumber = latestBlockNumber
     if (typeof data.removed !== 'undefined' && data.removed === true) return logger.error('this log was removed because of orphaned block, rejected tx or re-org, skipping...')
@@ -949,7 +922,6 @@ function handleLog (data) {
           var targetDate = moment(queryCheckUnixTime, 'X').toDate()
           processQueryInFuture(targetDate, {'active': true, 'callback_complete': false, 'retry_number': 0, 'target_timestamp': queryCheckUnixTime, 'oar': activeOracleInstance.oar, 'connector': activeOracleInstance.connector, 'cbAddress': activeOracleInstance.account, 'http_myid': myid, 'contract_myid': myIdInitial, 'query_delay': time, 'query_arg': JSON.stringify(formula), 'query_datasource': ds, 'contract_address': cAddr, 'event_tx': eventTx, 'block_tx_hash': blockHashTx, 'proof_type': proofType, 'gas_limit': gasLimit})
         }
-        myIdList = bridgeUtil.arrayCleanUp(myIdList)
       })
     })
   } catch (e) {
