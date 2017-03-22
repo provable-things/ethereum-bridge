@@ -1115,6 +1115,8 @@ function queryCompleteErrors (err) {
 }
 
 function updateQuery (callbackInfo, contract, errors, callback) {
+  logger.debug('update query content:', callbackInfo, contract)
+
   var dataDbUpdate = {}
   if (errors !== null) {
     dataDbUpdate = {'query_active': false, 'callback_complete': false, 'retry_number': 3}
@@ -1133,12 +1135,19 @@ function updateQuery (callbackInfo, contract, errors, callback) {
     'cbAddress': activeOracleInstance.account,
     'connector': activeOracleInstance.connector,
     'contract_myid': callbackInfo.myid,
-    'tx_hash': contract.transactionHash,
-    'contract_address': contract.to,
     'result': callbackInfo.result,
     'proof': callbackInfo.proof,
-    'gas_limit': contract.gasUsed,
     'errors': errors
+  }
+
+  if (contract === null) {
+    dbUpdateObj['callback'].tx_hash = null
+    dbUpdateObj['callback'].contract_address = null
+    dbUpdateObj['callback'].gas_limit = null
+  } else {
+    dbUpdateObj['callback'].tx_hash = contract.transactionHash
+    dbUpdateObj['callback'].contract_address = contract.to
+    dbUpdateObj['callback'].gas_limit = contract.gasUsed
   }
 
   BridgeDbManager().updateDbQuery(callbackInfo.myid, dbUpdateObj, function (err, res) {
@@ -1184,10 +1193,13 @@ function queryStatus (queryId, callback) {
 
 function checkCallbackTxs () {
   setInterval(function () {
+    logger.debug('checking invalid __callback transactions')
     if (!activeOracleInstance.oar || !activeOracleInstance.account || !activeOracleInstance.connector) return
-    if (BlockchainInterface().isConnected() && BlockchainInterface().inter.syncing === false) {
+    var isSyncing = BlockchainInterface().inter.syncing
+    if (BlockchainInterface().isConnected() && (isSyncing === false || (typeof isSyncing === 'object' && isSyncing.currentBlock > isSyncing.highestBlock))) {
       CallbackTx.find({'where': {'tx_confirmed': false, 'oar': activeOracleInstance.oar, 'cbAddress': activeOracleInstance.account}}, function (err, res) {
         if (err) return logger.error('failed to fetch callback tx', err)
+        logger.debug('__callback transactions list:', res)
         if (res.length === 0) return
         asyncLoop(res, function (transaction, next) {
           if (transaction.tx_hash === null) return next(null)
