@@ -70,7 +70,6 @@ dbConfig['BRIDGE_VERSION'] = BRIDGE_VERSION
 
 BridgeDbManager(dbConfig)
 
-var Query = BridgeDbManager().Query
 var CallbackTx = BridgeDbManager().CallbackTx
 var BridgeCache = BridgeDbManager().cache
 
@@ -433,7 +432,7 @@ function processPendingQueries (oar, connector, cbAddress) {
   connector = connector || activeOracleInstance.connector
   cbAddress = cbAddress || activeOracleInstance.account
   logger.info('fetching pending queries from database with oar:', oar, 'and callback address:', cbAddress)
-  Query.find({where: {'$and': [{'$or': [{'callback_complete': false}, {'query_active': true}], 'oar': oar, 'cbAddress': cbAddress}]}, order: 'timestamp_db ASC'}, function (err, pendingQueries) {
+  BridgeDbManager().getPendingQueries(oar, cbAddress, function (err, pendingQueries) {
     if (err) logger.error('fetching queries error', err)
     else {
       logger.info('found a total of', pendingQueries.length, 'pending queries')
@@ -906,7 +905,24 @@ function handleLog (data) {
       myid = data.result.id
       logger.info('new HTTP query created, id: ' + myid)
       var queryCheckUnixTime = bridgeUtil.getQueryUnixTime(time, unixTime)
-      Query.create({'active': true, 'callback_complete': false, 'retry_number': 0, 'target_timestamp': queryCheckUnixTime, 'oar': activeOracleInstance.oar, 'connector': activeOracleInstance.connector, 'cbAddress': activeOracleInstance.account, 'http_myid': myid, 'contract_myid': myIdInitial, 'query_delay': time, 'query_arg': JSON.stringify(formula), 'query_datasource': ds, 'contract_address': cAddr, 'event_tx': eventTx, 'block_tx_hash': blockHashTx, 'proof_type': proofType, 'gas_limit': gasLimit}, function (err, res) {
+      var newQueryObj = {
+        'target_timestamp': queryCheckUnixTime,
+        'oar': activeOracleInstance.oar,
+        'connector': activeOracleInstance.connector,
+        'cbAddress': activeOracleInstance.account,
+        'http_myid': myid,
+        'contract_myid': myIdInitial,
+        'query_delay': time,
+        'query_arg': JSON.stringify(formula),
+        'query_datasource': ds,
+        'contract_address': cAddr,
+        'event_tx': eventTx,
+        'block_tx_hash': blockHashTx,
+        'proof_type': proofType,
+        'gas_limit': gasLimit
+      }
+
+      BridgeDbManager().createDbQuery(newQueryObj, function (err, res) {
         if (err !== null) logger.error('query db create error', err)
         if (queryCheckUnixTime <= 0) {
           logger.info('checking HTTP query ' + myid + ' status in 0 seconds')
@@ -1022,6 +1038,7 @@ function queryComplete (queryComplObj) {
 }
 
 function __callbackWrapper (callbackObj, cb) {
+  logger.debug('__callbackWrapper object:', callbackObj)
   activeOracleInstance.__callback(callbackObj, function (err, contract) {
     if (err) {
       updateQuery(callbackObj, null, err, cb)
@@ -1034,23 +1051,23 @@ function __callbackWrapper (callbackObj, cb) {
 
 function checkCallbackTx (myid, callback) {
   if (ops.dev === true) return callback(null, false)
-  Query.findOne({where: {'contract_myid': myid}}, function (err, res) {
+  BridgeDbManager().checkCallbackQueryStatus(myid, function (err, findObject) {
     if (err) return callback(err, null)
-    if (res === null) return callback(new Error('queryComplete error, query with contract myid ' + myid + ' not found in database'), null)
-    if (typeof res.callback_complete === 'undefined') return callback(new Error('queryComplete error, query with contract myid ' + myid), null)
-    CallbackTx.findOne({where: {'contract_myid': myid}}, function (errC, resC) {
-      if (resC !== null) {
-        if (resC.tx_hash !== null) var txContent = BlockchainInterface().inter.getTransactionReceipt(resC.tx_hash)
-        if (typeof resC.tx_confirmed !== 'undefined') {
-          if (resC.tx_confirmed === false && txContent !== null) return callback(null, true)
-          else return callback(null, false)
-        }
-      } else if (res.callback_complete === true) return callback(null, true)
-      else return callback(null, false)
-    })
+    logger.debug('checkCallbackTx findObject content:', findObject)
+    var queryObj = findObject.query
+    var callbackObj = findObject.callback
+    if (typeof queryObj.callback_complete === 'undefined') return callback(new Error('queryComplete error, query with contract myid ' + myid), null)
+    if (callbackObj !== null) {
+      if (callbackObj.tx_hash !== null) var txContent = BlockchainInterface().inter.getTransactionReceipt(callbackObj.tx_hash)
+      if (typeof callbackObj.tx_confirmed !== 'undefined') {
+        if (callbackObj.tx_confirmed === false && txContent !== null) return callback(null, true)
+        else return callback(null, false)
+      }
+    } else if (queryObj.callback_complete === true) return callback(null, true)
+    else return callback(null, false)
     /* else {
-      var eventTx = BlockchainInterface().inter.getTransaction(res.event_tx)
-      if (eventTx === null || eventTx.blockHash === null || eventTx.blockHash !== res.block_tx_hash) return callback(new Error('queryComplete error, query with contract myid ' + myid + ' mismatch with block hash stored'), null)
+      var eventTx = BlockchainInterface().inter.getTransaction(queryObj.event_tx)
+      if (eventTx === null || eventTx.blockHash === null || eventTx.blockHash !== queryObj.block_tx_hash) return callback(new Error('queryComplete error, query with contract myid ' + myid + ' mismatch with block hash stored'), null)
       return callback(null, false)
     } */
   })
@@ -1105,20 +1122,31 @@ function updateQuery (callbackInfo, contract, errors, callback) {
   } else {
     dataDbUpdate = {'query_active': false, 'callback_complete': true}
   }
-  Query.update({where: {'contract_myid': callbackInfo.myid}}, {'$set': dataDbUpdate}, function (err, res) {
-    if (err) logger.error('queries database update failed for query with contract myid', callbackInfo.myid)
-    if (contract === null) {
-      setTimeout(function () {
-        callback()
-      }, 600)
-      return logger.error('transaction hash not found, callback tx database not updated', contract)
-    }
-    CallbackTx.updateOrCreate({'contract_myid': callbackInfo.myid}, {'timestamp_db': moment().format('x'), 'oar': activeOracleInstance.oar, 'cbAddress': activeOracleInstance.account, 'connector': activeOracleInstance.connector, 'contract_myid': callbackInfo.myid, 'tx_hash': contract.transactionHash, 'contract_address': contract.to, 'result': callbackInfo.result, 'proof': callbackInfo.proof, 'gas_limit': contract.gasUsed, 'errors': errors}, function (err, res) {
-      if (err) logger.error('failed to add a new transaction to database', err)
-      setTimeout(function () {
-        callback()
-      }, 600)
-    })
+  var dbUpdateObj = {
+    'query': dataDbUpdate,
+    'callback': {}
+  }
+
+  dbUpdateObj['callback'] = {
+    'timestamp_db': moment().format('x'),
+    'oar': activeOracleInstance.oar,
+    'cbAddress': activeOracleInstance.account,
+    'connector': activeOracleInstance.connector,
+    'contract_myid': callbackInfo.myid,
+    'tx_hash': contract.transactionHash,
+    'contract_address': contract.to,
+    'result': callbackInfo.result,
+    'proof': callbackInfo.proof,
+    'gas_limit': contract.gasUsed,
+    'errors': errors
+  }
+
+  BridgeDbManager().updateDbQuery(callbackInfo.myid, dbUpdateObj, function (err, res) {
+    if (err) logger.error(err)
+    if (contract === null) return logger.error('transaction hash not found, callback tx database not updated', contract)
+    setTimeout(function () {
+      callback()
+    }, 600)
   })
 }
 
@@ -1172,7 +1200,7 @@ function checkCallbackTxs () {
               return next(null)
             })
           } else if ((moment().format('x') - transaction.timestamp_db) > 300000) {
-            Query.findOne({where: {'contract_myid': transaction.contract_myid}}, function (errQuery, contractInfo) {
+            BridgeDbManager().getOneQuery(transaction.contract_myid, function (errQuery, contractInfo) {
               if (errQuery) return next(errQuery)
               txContent = BlockchainInterface().inter.getTransactionReceipt(transaction.tx_hash) // check again
               if (contractInfo === null || txContent !== null) return next(null)
