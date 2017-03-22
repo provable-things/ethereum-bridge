@@ -13,7 +13,7 @@ Suggested version: node 6.9.1
 
 run `sudo apt-get install build-essential -y`
 
-###Install
+### Install
 ```
 npm install
 ```
@@ -57,7 +57,7 @@ node bridge -H localhost:8545 --broadcast -a 0
 (load the first account in your keys.json file (index n.0) and deploy contracts (txs broadcasted to localhost:8545 node))
 
 
-####Add a custom address resolver
+#### Add a custom address resolver
 
 Add `OAR = OraclizeAddrResolverI(EnterYourOarCustomAddress);` to your contract constructor, example:
 
