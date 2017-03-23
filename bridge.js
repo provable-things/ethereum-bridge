@@ -17,7 +17,7 @@ var BridgeDbManagerLib = require('./lib/bridge-db-manager')
 var BridgeDbManager = BridgeDbManagerLib.BridgeDbManager
 var BridgeLogEvents = BridgeLogManager.events
 var winston = require('winston')
-var colors = require('colors/safe')
+var colors = bridgeUtil.colors
 var async = require('async')
 var queue = async.queue(__callbackWrapper, 1)
 var fs = require('fs')
@@ -28,22 +28,6 @@ var moment = require('moment')
 
 var OracleInstance = bridgeCore.OracleInstance
 var activeOracleInstance
-
-var colorMap = {
-  'info': 'cyan',
-  'warn': 'yellow',
-  'error': 'red',
-  'verbose': 'magenta',
-  'debug': 'bgYellow',
-  'stats': 'bgBlue'
-}
-
-function colorize (string) {
-  var type = string.toLowerCase()
-  if (typeof colorMap[type] !== 'undefined') {
-    return colors[colorMap[type]](string)
-  } else return string
-}
 
 var dbConfig = {
   'driver': 'tingodb',
@@ -116,32 +100,17 @@ if (ops.logfile) {
   logFilePath = './bridge.log'
 }
 
-var logLevels = {
-  error: 0,
-  warn: 1,
-  info: 2,
-  verbose: 3,
-  debug: 4,
-  stats: 5
-}
-
-function setLogLevel (level) {
-  level = level.toLowerCase()
-  if (Object.keys(logLevels).indexOf(level) === -1) throw new Error('Invalid log level')
-  return level
-}
-
 var logger = new (winston.Logger)({
-  levels: logLevels,
+  levels: bridgeUtil.getLogLevels(),
   transports: [
     new (winston.transports.Console)({
       colorize: true,
-      level: setLogLevel(ops.loglevel),
+      level: bridgeUtil.parseLogLevel(ops.loglevel),
       timestamp: function () {
         return moment().toISOString()
       },
       formatter: function (options) {
-        return '[' + colors.grey(options.timestamp()) + '] ' + colorize(options.level.toUpperCase()) + ' ' + (options.message ? options.message : '') +
+        return '[' + colors.grey(options.timestamp()) + '] ' + bridgeUtil.colorize(options.level.toUpperCase()) + ' ' + (options.message ? options.message : '') +
           (options.meta && Object.keys(options.meta).length ? '\n\t' + JSON.stringify(options.meta) : '')
       }
     }),
