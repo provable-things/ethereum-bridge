@@ -7,6 +7,7 @@ var i18n = require('i18n')
 var versionCompare = require('compare-versions')
 var schedule = require('node-schedule')
 var bridgeUtil = require('./lib/bridge-util')
+var BridgeCliParse = require('./lib/bridge-cli-parse')
 var bridgeCore = require('./lib/bridge-core')
 var BridgeAccount = require('./lib/bridge-account')
 var BlockchainInterface = require('./lib/blockchain-interface')
@@ -84,50 +85,24 @@ var skipQueries = false
 var confirmations = 12
 var latestBlockNumber = -1
 var isTestRpc = false
-var reorgInterval = []
 var blockRangeResume = []
 var pricingInfo = []
 var officialOar = []
 var currentInstance = 'latest'
 var basePrice = 0 // in ETH
 
-var ops = stdio.getopt({
-  'instance': {args: 1, description: 'filename of the oracle configuration file that can be found in ./config/instance/ (i.e. oracle_instance_148375903.json)'},
-  'oar': {key: 'o', args: 1, description: 'OAR Oraclize (address)'},
-  'url': {key: 'u', args: 1, description: BLOCKCHAIN_ABBRV + ' node URL (default: http://' + defaultnode + ')'},
-  'HOST': {key: 'H', args: 1, description: BLOCKCHAIN_ABBRV + ' node IP:PORT (default: ' + defaultnode + ')'},
-  'port': {key: 'p', args: 1, description: BLOCKCHAIN_ABBRV + ' node localhost port (default: 8545)'},
-  'account': {key: 'a', args: 1, description: 'unlocked account used to deploy Oraclize connector and OAR'},
-  'broadcast': {description: 'broadcast only mode, a json key file with the private key is mandatory to sign all transactions'},
-  'gas': {args: 1, description: 'change gas amount limit used to deploy contracts(in wei) (default: ' + defaultGas + ')'},
-  'key': {args: 1, description: 'JSON key file path (default: ' + keyFilePath + ')'},
-  'dev': {description: 'Enable dev mode (skip contract myid check)'},
-  'new': {description: 'Generate and save a new address in ' + keyFilePath + ' file'},
-  'logfile': {args: 1, description: 'bridge log file path (default: current bridge folder)'},
-  'nocomp': {description: 'disable contracts compilation'},
-  'forcecomp': {description: 'force contracts compilation'},
-  'confirmation': {args: 1, description: 'specify the minimum confirmations to validate a transaction in case of chain re-org. (default: ' + confirmations + ')'},
-  'abiconn': {args: 1, description: 'Load custom connector abi interface (path)'},
-  'abioar': {args: 1, description: 'Load custom oar abi interface (path)'},
-  'newconn': {description: 'Generate and update the OAR with the new connector address'},
-  'disable-deterministic-oar': {description: 'Disable deterministic oar'},
-  'update-ds': {description: 'Update datasource price (pricing is taken from the oracle instance configuration file)'},
-  'update-price': {description: 'Update base price (pricing is taken from the oracle instance configuration file)'},
-  'remote-price': {description: 'Use the remote API to get the pricing info'},
-  'disable-price': {description: 'Disable pricing'},
-  'price-usd': {args: 1, description: 'Set ' + BLOCKCHAIN_BASE_UNIT + '/USD base price (USD price per 1 ' + BLOCKCHAIN_BASE_UNIT + ')'},
-  'price-update-interval': {args: 1, description: 'Set base price update interval in seconds'},
-  // 'changeconn': {args:1, description: 'Provide a connector address and update the OAR with the new connector address'},
-  'loadabi': {description: 'Load default abi interface (under ' + BRIDGE_NAME + '/contracts/abi)'},
-  'from': {args: 1, description: 'fromBlock (number) to resume logs (--to is required)'},
-  'to': {args: 1, description: 'toBlock (number) to resume logs (--from is required)'},
-  'resume': {description: 'resume all skipped queries (note: retries will not be counted/updated)'},
-  'skip': {description: 'skip all pending queries (note: retries will not be counted/updated)'},
-  'loglevel': {args: 1, description: 'specify the log level', default: 'info'},
-  'non-interactive': {description: 'run in non interactive mode', default: false},
-  'enable-stats': {description: 'enable stats logging', default: false},
-  'no-hints': {description: 'disable hints', default: false}
-})
+var cliOptions = {
+  'BLOCKCHAIN_ABBRV': BLOCKCHAIN_ABBRV,
+  'BLOCKCHAIN_BASE_UNIT': BLOCKCHAIN_BASE_UNIT,
+  'KEY_FILE_PATH': keyFilePath,
+  'BRIDGE_NAME': BRIDGE_NAME,
+  'DEFAULT_NODE': defaultnode,
+  'DEFAULT_GAS_LIMIT': defaultGas
+}
+
+BridgeCliParse(cliOptions)
+
+var ops = stdio.getopt(BridgeCliParse().getOptions())
 
 console.log('Please wait...')
 
@@ -794,18 +769,24 @@ function processQueryInFuture (date, query) {
   })
 }
 
-function reorgListen (from) {
+function reorgListen () {
   try {
     if (isTestRpc) return
-    var initialBlock = from || BlockchainInterface().inter.blockNumber - (confirmations * 2)
+    var startingBlock = BlockchainInterface().inter.blockNumber
+    var initialBlock = startingBlock - (confirmations * 2)
     var prevBlock = -1
     var latestBlock = -1
-    reorgInterval = setInterval(function () {
+    logger.debug('running reorgListen')
+    setInterval(function () {
       try {
+        if (initialBlock < 0) initialBlock = 0
+        logger.debug('reorg block target: ' + initialBlock)
         latestBlock = BlockchainInterface().inter.blockNumber
         if (prevBlock === -1) prevBlock = latestBlock
         if (latestBlock > prevBlock && prevBlock !== latestBlock && (latestBlock - initialBlock) > confirmations) {
+          if (!BlockchainInterface().isConnected()) return
           prevBlock = latestBlock
+          logger.debug('reorg, fetching logs from-to: ' + initialBlock)
           BridgeLogManager.fetchLogsByBlock(initialBlock, initialBlock)
           initialBlock += 1
         }
@@ -1075,7 +1056,6 @@ function checkCallbackTx (myid, callback) {
 
 function manageErrors (err) {
   if (typeof err !== 'undefined' && typeof err.message !== 'undefined' && err.message.match(/Invalid JSON RPC response/)) {
-    clearInterval(reorgInterval)
     // retry after 1 minute
     logger.warn('JSON RPC error, trying to re-connect every 30 seconds')
     var nodeStatusCheck = setInterval(function () {
@@ -1090,13 +1070,6 @@ function manageErrors (err) {
             logger.info('trying to recover "lost" queries...')
             BridgeLogManager.fetchLogsByBlock(latestBlockNumber, nodeStatus)
           }
-
-          schedule.scheduleJob(moment().add(5, 'seconds').toDate(), function () {
-            logger.info('restarting logs...')
-
-            // chain re-org listen
-            reorgListen(latestBlockNumber)
-          })
         }
       } catch (e) {
         if (e.message.match(/Invalid JSON RPC response/)) {
@@ -1153,6 +1126,7 @@ function updateQuery (callbackInfo, contract, errors, callback) {
   BridgeDbManager().updateDbQuery(callbackInfo.myid, dbUpdateObj, function (err, res) {
     if (err) logger.error(err)
     if (contract === null) return logger.error('transaction hash not found, callback tx database not updated', contract)
+    BridgeCache.set('callback_' + callbackInfo.myid, BlockchainInterface().inter.blockNumber, 600)
     setTimeout(function () {
       callback()
     }, 600)
@@ -1216,8 +1190,12 @@ function checkCallbackTxs () {
               if (errQuery) return next(errQuery)
               txContent = BlockchainInterface().inter.getTransactionReceipt(transaction.tx_hash) // check again
               if (contractInfo === null || txContent !== null) return next(null)
+              var callbackTxCache = BridgeCache.get('callback_' + transaction.contract_myid)
+              logger.debug('callback tx cache content: ' + callbackTxCache)
+              if (callbackTxCache !== undefined && BlockchainInterface().inter.blockNumber <= callbackTxCache) return next(null)
               logger.warn('__callback transaction', transaction.tx_hash, 'not confirmed after 5 minutes, resuming query with contract myid', contractInfo.contract_myid)
               contractInfo.force_query = true
+              BridgeCache.set('callback_' + transaction.contract_myid, BlockchainInterface().inter.blockNumber, 600)
               CallbackTx.update({where: {'tx_hash': transaction.tx_hash}}, {'$set': {'timestamp_db': moment().format('x')}}, function (errUpdate, resUpdate) {
                 setTimeout(function () {
                   checkQueryStatus(contractInfo)
