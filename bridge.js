@@ -20,7 +20,6 @@ var colors = bridgeUtil.colors
 var async = require('async')
 var queue = async.queue(__callbackWrapper, 1)
 var fs = require('fs')
-var cbor = require('cbor')
 var path = require('path')
 var asyncLoop = require('node-async-loop')
 var moment = require('moment')
@@ -155,7 +154,7 @@ var oraclizeConfiguration = {
       'source': toFullPath('./contracts/ethereum-api/connectors/addressResolver.sol')
     }
   },
-  'deterministic_oar': cliConfiguration['disable-deterministic-oar'],
+  'deterministic_oar': !cliConfiguration['disable-deterministic-oar'],
   'deploy_gas': cliConfiguration.defaultGas,
   'account': cliConfiguration.account,
   'mode': mode,
@@ -523,7 +522,7 @@ function deployOraclize () {
     function deployOAR (result, callback) {
       logger.info('connector deployed to:', result.connector)
       logger.debug('connector deployment result', result)
-      if (cliConfiguration['disable-deterministic-oar'] === true && BlockchainInterface().getAccountNonce(BridgeAccount().getTempAddress()) === 0) logger.info('deploying the address resolver with a deterministic address...')
+      if (cliConfiguration['disable-deterministic-oar'] === false && BlockchainInterface().getAccountNonce(BridgeAccount().getTempAddress()) === 0) logger.info('deploying the address resolver with a deterministic address...')
       else {
         if (cliConfiguration['no-hints'] === false) logger.warn('deterministic OAR disabled/not available, please update your contract with the new custom address generated')
         logger.info('deploying the address resolver contract...')
@@ -710,13 +709,16 @@ function keepNodeAlive () {
 function manageLog (data) {
   try {
     logger.debug('manageLog, raw log:', data)
-    if (!('args' in data)) return logger.error('no args found in log', data)
-    var contractMyid = data.args['cid']
+    if (typeof data === 'undefined') return logger.error('log error ' + data)
+    var contractMyid = data.args['cid'] || data['parsed_logs']['contract_myid']
     BridgeDbManager().isAlreadyProcessed(contractMyid, function (err, isProcessed) {
       if (err) isProcessed = false
-      logger.debug('mangeLog isProcessed:', isProcessed)
+      logger.debug('mangeLog isProcessed: ' + isProcessed)
       if (isProcessed === false) {
         if (activeOracleInstance.isOracleEvent(data)) {
+          if (cliConfiguration.dev !== true && BridgeCache.get(contractMyid) === true) return
+          if (typeof data.removed !== 'undefined' && data.removed === true) return logger.error('this log was removed because of orphaned block, rejected tx or re-org, skipping...')
+          if ((typeof data.malformed !== 'undefined' && data.malformed === true) || typeof data.parsed_log === 'undefined') return logger.error('malformed log, skipping...')
           handleLog(data)
         } else {
           logger.warn('log with contract myid:', contractMyid, 'was triggered, but is not recognized as an oracle event, skipping event...')
@@ -728,66 +730,47 @@ function manageLog (data) {
   }
 }
 
-function handleLog (data) {
+function handleLog (log) {
   try {
-    logger.info('new log ', data)
-    var eventTx = data['transactionHash']
-    var blockHashTx = data['blockHash']
-    var logObj = data
-    data = logObj['args']
-    var myIdInitial = data['cid']
-    if (cliConfiguration.dev !== true && BridgeCache.get(myIdInitial) === true) return
-    BridgeCache.set(myIdInitial, true)
-    latestBlockNumber = BlockchainInterface().inter.blockNumber
-    activeOracleInstance.latestBlockNumber = latestBlockNumber
-    if (typeof data.removed !== 'undefined' && data.removed === true) return logger.error('this log was removed because of orphaned block, rejected tx or re-org, skipping...')
-    var myid = myIdInitial
-    var cAddr = data['sender']
-    var ds = data['datasource']
-    var formula = data['arg']
-    if (logObj['event'] === 'Log1') {
-      if (typeof data['arg'] === 'undefined') return logger.error('error, Log1 event is missing "arg", skipping...')
-      if (data['arg'] === false) return logger.error('malformed log, skipping...')
-      formula = data['arg']
-    } else if (logObj['event'] === 'Log2') {
-      if (typeof data['arg1'] === 'undefined' && typeof data['arg2'] === 'undefined') return logger.error('error, Log2 event is missing "arg1" and "arg2", skipping...')
-      if (data['arg1'] === false || data['arg2'] === false) return logger.error('malformed log, skipping...')
-      formula = [data['arg1'], data['arg2']]
-    } else if (logObj['event'] === 'LogN') {
-      if (typeof data['args'] === 'undefined') return logger.error('error, LogN event is missing "args", skipping...')
-      if (data['args'] === false) return logger.error('malformed log, skipping...')
-      formula = cbor.decodeAllSync(new Buffer(data['args'].substr(2), 'hex'))[0]
-    }
+    logger.info('new log ', log)
+    var contractMyid = log['parsed_log']['contract_myid']
+    BridgeCache.set(contractMyid, true)
+    var eventTx = log['transactionHash']
+    var blockHashTx = log['blockHash']
+    activeOracleInstance.latestBlockNumber = BlockchainInterface().inter.blockNumber
+    var contractAddress = log['parsed_log']['contract_address']
+    var datasource = log['parsed_log']['datasource']
+    var formula = log['parsed_log']['formula']
+    var time = log['parsed_log']['timestamp']
+    var gasLimit = log['parsed_log']['gaslimit']
+    var proofType = log['parsed_log']['proofType']
 
-    var time = data['timestamp'].toNumber()
     var unixTime = moment().unix()
-    if (!bridgeUtil.isValidTime(time, unixTime)) return logger.error('the query is too far in the future, skipping event...')
+    if (!bridgeUtil.isValidTime(time, unixTime)) return logger.error('the query is too far in the future, skipping log...')
 
-    var gasLimit = data['gaslimit'].toNumber()
-    var proofType = bridgeCore.ethUtil.addHexPrefix(data['proofType'])
     var query = {
-      when: time,
-      datasource: ds,
-      query: formula,
-      id2: bridgeCore.ethUtil.stripHexPrefix(myIdInitial),
-      proof_type: bridgeUtil.toInt(proofType)
+      'when': time,
+      'datasource': datasource,
+      'query': formula,
+      'id2': bridgeCore.ethUtil.stripHexPrefix(contractMyid),
+      'proof_type': bridgeUtil.toInt(proofType)
     }
     createQuery(query, function (data) {
       if (typeof data !== 'object' || typeof data.result === 'undefined' || typeof data.result.id === 'undefined') return logger.error('no HTTP myid found, skipping log...')
-      myid = data.result.id
-      logger.info('new HTTP query created, id: ' + myid)
+      var httpMyid = data.result.id
+      logger.info('new HTTP query created, id: ' + httpMyid)
       var queryCheckUnixTime = bridgeUtil.getQueryUnixTime(time, unixTime)
       var newQueryObj = {
         'target_timestamp': queryCheckUnixTime,
         'oar': activeOracleInstance.oar,
         'connector': activeOracleInstance.connector,
         'cbAddress': activeOracleInstance.account,
-        'http_myid': myid,
-        'contract_myid': myIdInitial,
+        'http_myid': httpMyid,
+        'contract_myid': contractMyid,
         'query_delay': time,
         'query_arg': JSON.stringify(formula),
-        'query_datasource': ds,
-        'contract_address': cAddr,
+        'query_datasource': datasource,
+        'contract_address': contractAddress,
         'event_tx': eventTx,
         'block_tx_hash': blockHashTx,
         'proof_type': proofType,
@@ -797,18 +780,36 @@ function handleLog (data) {
       BridgeDbManager().createDbQuery(newQueryObj, function (err, res) {
         if (err !== null) logger.error('query db create error', err)
         if (queryCheckUnixTime <= 0) {
-          logger.info('checking HTTP query ' + myid + ' status in 0 seconds')
+          logger.info('checking HTTP query ' + httpMyid + ' status in 0 seconds')
           var queryObj = {
-            'http_myid': myid,
-            'contract_myid': myIdInitial,
-            'contract_address': cAddr,
+            'http_myid': httpMyid,
+            'contract_myid': contractMyid,
+            'contract_address': contractAddress,
             'proof_type': proofType,
             'gas_limit': gasLimit
           }
           checkQueryStatus(queryObj)
         } else {
           var targetDate = moment(queryCheckUnixTime, 'X').toDate()
-          processQueryInFuture(targetDate, {'active': true, 'callback_complete': false, 'retry_number': 0, 'target_timestamp': queryCheckUnixTime, 'oar': activeOracleInstance.oar, 'connector': activeOracleInstance.connector, 'cbAddress': activeOracleInstance.account, 'http_myid': myid, 'contract_myid': myIdInitial, 'query_delay': time, 'query_arg': JSON.stringify(formula), 'query_datasource': ds, 'contract_address': cAddr, 'event_tx': eventTx, 'block_tx_hash': blockHashTx, 'proof_type': proofType, 'gas_limit': gasLimit})
+          processQueryInFuture(targetDate, {
+            'active': true,
+            'callback_complete': false,
+            'retry_number': 0,
+            'target_timestamp': queryCheckUnixTime,
+            'oar': activeOracleInstance.oar,
+            'connector': activeOracleInstance.connector,
+            'cbAddress': activeOracleInstance.account,
+            'http_myid': httpMyid,
+            'contract_myid': contractMyid,
+            'query_delay': time,
+            'query_arg': JSON.stringify(formula),
+            'query_datasource': datasource,
+            'contract_address': contractAddress,
+            'event_tx': eventTx,
+            'block_tx_hash': blockHashTx,
+            'proof_type': proofType,
+            'gas_limit': gasLimit
+          })
         }
       })
     })
@@ -957,7 +958,7 @@ function manageErrors (err) {
           logger.info('json-rpc is now available')
 
           // fetch 'lost' queries
-          if (latestBlockNumber < nodeStatus) {
+          if (activeOracleInstance.latestBlockNumber < nodeStatus) {
             logger.info('trying to recover "lost" queries...')
             BridgeLogManager.fetchLogsByBlock(latestBlockNumber, nodeStatus)
           }
