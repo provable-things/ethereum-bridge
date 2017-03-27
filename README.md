@@ -78,6 +78,13 @@ contract test() {
 
 **Note:** The address chosen will be used to deploy all the Oraclize contracts, **make sure to not deploy contracts that use Oraclize on the same address.**
 
+
+### How to update the bridge
+
+If a new version is detected you can run `npm run update` to automatically donwload and install the latest version from github.
+
+
+
 ### Optional flags
 
 * optional:

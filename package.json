@@ -31,6 +31,7 @@
     "standard": "*"
   },
   "scripts": {
+    "update": "git pull && npm install",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "engines": {
