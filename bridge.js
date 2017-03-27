@@ -732,7 +732,7 @@ function manageLog (data) {
 
 function handleLog (log) {
   try {
-    logger.info('new log ', log)
+    logger.info('new ' + log.event + ' event' , log)
     var contractMyid = log['parsed_log']['contract_myid']
     BridgeCache.set(contractMyid, true)
     var eventTx = log['transactionHash']
