@@ -596,7 +596,7 @@ function runLog () {
     logger.warn('if you are running a test suit with Truffle and TestRPC or your chain is reset often please use the --dev mode')
   }
 
-  if (cliConfiguration.dev) logger.warn('re-org block listen is disabled in --dev mode')
+  if (cliConfiguration.dev || cliConfiguration['disable-reorg'] === true) logger.warn('re-org block listen is disabled')
   else reorgListen()
 
   logger.info('Listening @ ' + activeOracleInstance.connector + ' (Oraclize Connector)\n')
