@@ -72,7 +72,8 @@ var cliOptions = {
   'BLOCKCHAIN_BASE_UNIT': BLOCKCHAIN_BASE_UNIT,
   'KEY_FILE_PATH': keyFilePath,
   'BRIDGE_NAME': BRIDGE_NAME,
-  'DEFAULT_NODE': 'localhost:8545'
+  'DEFAULT_NODE': 'localhost:8545',
+  'BRIDGE_VERSION': BRIDGE_VERSION
 }
 
 BridgeCliParse(cliOptions)
