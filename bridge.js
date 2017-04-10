@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 checkVersion()
-var request = require('request')
 var readline = require('readline')
 var i18n = require('i18n')
 var versionCompare = require('compare-versions')
@@ -409,37 +408,37 @@ function nodeError () {
 }
 
 function checkBridgeVersion (callback) {
-  request.get('https://api.oraclize.it/v1/platform/info', {json: true, headers: { 'X-User-Agent': BRIDGE_NAME + '/' + BRIDGE_VERSION + ' (nodejs)' }}, function (error, response, body) {
+  var bridgeObj = {'BRIDGE_NAME': BRIDGE_NAME, 'BRIDGE_VERSION': BRIDGE_VERSION}
+  bridgeHttp.getPlatformInfo(bridgeObj, function (error, body) {
     logger.debug('check bridge version body result', body)
     if (error) return callback(error, null)
     try {
-      if (response.statusCode === 200) {
-        if (typeof body !== 'object' || !(BRIDGE_NAME in body.result.distributions)) return callback(new Error('Bridge name not found'), null)
-        var latestVersion = body.result.distributions[BRIDGE_NAME].latest.version
-        if (versionCompare(BRIDGE_VERSION, latestVersion) === -1) {
-          logger.warn('\n************************************************************************\nA NEW VERSION OF THIS TOOL HAS BEEN DETECTED\nIT IS HIGHLY RECOMMENDED THAT YOU ALWAYS RUN THE LATEST VERSION, PLEASE UPGRADE TO ' + BRIDGE_NAME.toUpperCase() + ' ' + latestVersion + '\n************************************************************************\n')
-        }
-        if (typeof body.result.pricing !== 'undefined' && typeof body.result.quotes !== 'undefined') {
-          var datasources = body.result.pricing.datasources
-          var proofPricing = body.result.pricing.proofs
-          basePrice = body.result.quotes.ETH
-          for (var i = 0; i < datasources.length; i++) {
-            var thisDatasource = datasources[i]
-            for (var j = 0; j < thisDatasource.proof_types.length; j++) {
-              var units = thisDatasource.units + proofPricing[thisDatasource.proof_types[j]].units
-              pricingInfo.push({'name': thisDatasource.name, 'proof': thisDatasource.proof_types[j], 'units': units})
-              pricingInfo.push({'name': thisDatasource.name, 'proof': thisDatasource.proof_types[j] + 1, 'units': units})
-            }
+      var checkOutdated = bridgeUtil.checkIfOutdated(bridgeObj, body)
+      if (checkOutdated === false) return callback(new Error('Bridge name not found'), null)
+      if (checkOutdated.outdated === true) {
+        var latestVersion = checkOutdated.version
+        logger.warn('\n************************************************************************\nA NEW VERSION OF THIS TOOL HAS BEEN DETECTED\nIT IS HIGHLY RECOMMENDED THAT YOU ALWAYS RUN THE LATEST VERSION, PLEASE UPGRADE TO ' + BRIDGE_NAME.toUpperCase() + ' ' + latestVersion + '\n************************************************************************\n')
+      }
+      if (typeof body.result.pricing !== 'undefined' && typeof body.result.quotes !== 'undefined') {
+        var datasources = body.result.pricing.datasources
+        var proofPricing = body.result.pricing.proofs
+        basePrice = body.result.quotes.ETH
+        for (var i = 0; i < datasources.length; i++) {
+          var thisDatasource = datasources[i]
+          for (var j = 0; j < thisDatasource.proof_types.length; j++) {
+            var units = thisDatasource.units + proofPricing[thisDatasource.proof_types[j]].units
+            pricingInfo.push({'name': thisDatasource.name, 'proof': thisDatasource.proof_types[j], 'units': units})
+            pricingInfo.push({'name': thisDatasource.name, 'proof': thisDatasource.proof_types[j] + 1, 'units': units})
           }
         }
-        if (typeof body.result.deployments !== 'undefined' && BLOCKCHAIN_NAME in body.result.deployments) {
-          var deployments = body.result.deployments[BLOCKCHAIN_NAME]
-          Object.keys(deployments).forEach(function (key) {
-            officialOar.push(deployments[key]['addressResolver'])
-          })
-        }
-        return callback(null, true)
-      } else return callback(new Error(response.statusCode, 'HTTP status', null))
+      }
+      if (typeof body.result.deployments !== 'undefined' && BLOCKCHAIN_NAME in body.result.deployments) {
+        var deployments = body.result.deployments[BLOCKCHAIN_NAME]
+        Object.keys(deployments).forEach(function (key) {
+          officialOar.push(deployments[key]['addressResolver'])
+        })
+      }
+      return callback(null, true)
     } catch (e) {
       return callback(e, null)
     }
