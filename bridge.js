@@ -15,6 +15,7 @@ var BridgeStats = require('./lib/bridge-stats')
 var BridgeDbManagerLib = require('./lib/bridge-db-manager')
 var BridgeDbManager = BridgeDbManagerLib.BridgeDbManager
 var BridgeLogEvents = BridgeLogManager.events
+var AddressWatcher = require('./lib/address-watcher')
 var winston = require('winston')
 var colors = bridgeUtil.colors
 var async = require('async')
@@ -637,6 +638,9 @@ function runLog () {
   }
 
   if (!isTestRpc && !cliConfiguration.dev) checkCallbackTxs()
+
+  AddressWatcher({'address': activeOracleInstance.account, 'logger': logger, 'balance_limit': 1000})
+  AddressWatcher().init()
 }
 
 function priceUpdater (seconds) {
