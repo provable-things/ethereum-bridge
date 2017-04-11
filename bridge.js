@@ -1,9 +1,7 @@
 #!/usr/bin/env node
 checkVersion()
-var request = require('request')
 var readline = require('readline')
 var i18n = require('i18n')
-var versionCompare = require('compare-versions')
 var schedule = require('node-schedule')
 var bridgeUtil = require('./lib/bridge-util')
 var BridgeCliParse = require('./lib/bridge-cli-parse')
@@ -11,10 +9,12 @@ var bridgeCore = require('./lib/bridge-core')
 var BridgeAccount = require('./lib/bridge-account')
 var BlockchainInterface = require('./lib/blockchain-interface')
 var BridgeLogManager = require('./lib/bridge-log-manager')
+var bridgeHttp = require('./lib/bridge-http')
 var BridgeStats = require('./lib/bridge-stats')
 var BridgeDbManagerLib = require('./lib/bridge-db-manager')
 var BridgeDbManager = BridgeDbManagerLib.BridgeDbManager
 var BridgeLogEvents = BridgeLogManager.events
+var AddressWatcher = require('./lib/address-watcher')
 var winston = require('winston')
 var colors = bridgeUtil.colors
 var async = require('async')
@@ -71,7 +71,8 @@ var cliOptions = {
   'BLOCKCHAIN_BASE_UNIT': BLOCKCHAIN_BASE_UNIT,
   'KEY_FILE_PATH': keyFilePath,
   'BRIDGE_NAME': BRIDGE_NAME,
-  'DEFAULT_NODE': 'localhost:8545'
+  'DEFAULT_NODE': 'localhost:8545',
+  'BRIDGE_VERSION': BRIDGE_VERSION
 }
 
 BridgeCliParse(cliOptions)
@@ -407,37 +408,37 @@ function nodeError () {
 }
 
 function checkBridgeVersion (callback) {
-  request.get('https://api.oraclize.it/v1/platform/info', {json: true, headers: { 'X-User-Agent': BRIDGE_NAME + '/' + BRIDGE_VERSION + ' (nodejs)' }}, function (error, response, body) {
+  var bridgeObj = {'BRIDGE_NAME': BRIDGE_NAME, 'BRIDGE_VERSION': BRIDGE_VERSION}
+  bridgeHttp.getPlatformInfo(bridgeObj, function (error, body) {
     logger.debug('check bridge version body result', body)
     if (error) return callback(error, null)
     try {
-      if (response.statusCode === 200) {
-        if (typeof body !== 'object' || !(BRIDGE_NAME in body.result.distributions)) return callback(new Error('Bridge name not found'), null)
-        var latestVersion = body.result.distributions[BRIDGE_NAME].latest.version
-        if (versionCompare(BRIDGE_VERSION, latestVersion) === -1) {
-          logger.warn('\n************************************************************************\nA NEW VERSION OF THIS TOOL HAS BEEN DETECTED\nIT IS HIGHLY RECOMMENDED THAT YOU ALWAYS RUN THE LATEST VERSION, PLEASE UPGRADE TO ' + BRIDGE_NAME.toUpperCase() + ' ' + latestVersion + '\n************************************************************************\n')
-        }
-        if (typeof body.result.pricing !== 'undefined' && typeof body.result.quotes !== 'undefined') {
-          var datasources = body.result.pricing.datasources
-          var proofPricing = body.result.pricing.proofs
-          basePrice = body.result.quotes.ETH
-          for (var i = 0; i < datasources.length; i++) {
-            var thisDatasource = datasources[i]
-            for (var j = 0; j < thisDatasource.proof_types.length; j++) {
-              var units = thisDatasource.units + proofPricing[thisDatasource.proof_types[j]].units
-              pricingInfo.push({'name': thisDatasource.name, 'proof': thisDatasource.proof_types[j], 'units': units})
-              pricingInfo.push({'name': thisDatasource.name, 'proof': thisDatasource.proof_types[j] + 1, 'units': units})
-            }
+      var checkOutdated = bridgeUtil.checkIfOutdated(bridgeObj, body)
+      if (checkOutdated === false) return callback(new Error('Bridge name not found'), null)
+      if (checkOutdated.outdated === true) {
+        var latestVersion = checkOutdated.version
+        logger.warn('\n************************************************************************\nA NEW VERSION OF THIS TOOL HAS BEEN DETECTED\nIT IS HIGHLY RECOMMENDED THAT YOU ALWAYS RUN THE LATEST VERSION, PLEASE UPGRADE TO ' + BRIDGE_NAME.toUpperCase() + ' ' + latestVersion + '\n************************************************************************\n')
+      }
+      if (typeof body.result.pricing !== 'undefined' && typeof body.result.quotes !== 'undefined') {
+        var datasources = body.result.pricing.datasources
+        var proofPricing = body.result.pricing.proofs
+        basePrice = body.result.quotes.ETH
+        for (var i = 0; i < datasources.length; i++) {
+          var thisDatasource = datasources[i]
+          for (var j = 0; j < thisDatasource.proof_types.length; j++) {
+            var units = thisDatasource.units + proofPricing[thisDatasource.proof_types[j]].units
+            pricingInfo.push({'name': thisDatasource.name, 'proof': thisDatasource.proof_types[j], 'units': units})
+            pricingInfo.push({'name': thisDatasource.name, 'proof': thisDatasource.proof_types[j] + 1, 'units': units})
           }
         }
-        if (typeof body.result.deployments !== 'undefined' && BLOCKCHAIN_NAME in body.result.deployments) {
-          var deployments = body.result.deployments[BLOCKCHAIN_NAME]
-          Object.keys(deployments).forEach(function (key) {
-            officialOar.push(deployments[key]['addressResolver'])
-          })
-        }
-        return callback(null, true)
-      } else return callback(new Error(response.statusCode, 'HTTP status', null))
+      }
+      if (typeof body.result.deployments !== 'undefined' && BLOCKCHAIN_NAME in body.result.deployments) {
+        var deployments = body.result.deployments[BLOCKCHAIN_NAME]
+        Object.keys(deployments).forEach(function (key) {
+          officialOar.push(deployments[key]['addressResolver'])
+        })
+      }
+      return callback(null, true)
     } catch (e) {
       return callback(e, null)
     }
@@ -596,7 +597,7 @@ function runLog () {
     logger.warn('if you are running a test suit with Truffle and TestRPC or your chain is reset often please use the --dev mode')
   }
 
-  if (cliConfiguration.dev) logger.warn('re-org block listen is disabled in --dev mode')
+  if (cliConfiguration.dev || cliConfiguration['disable-reorg'] === true) logger.warn('re-org block listen is disabled')
   else reorgListen()
 
   logger.info('Listening @ ' + activeOracleInstance.connector + ' (Oraclize Connector)\n')
@@ -636,6 +637,9 @@ function runLog () {
   }
 
   if (!isTestRpc && !cliConfiguration.dev) checkCallbackTxs()
+
+  AddressWatcher({'address': activeOracleInstance.account, 'logger': logger, 'balance_limit': 1000})
+  AddressWatcher().init()
 }
 
 function priceUpdater (seconds) {
@@ -714,6 +718,7 @@ function manageLog (data) {
     BridgeDbManager().isAlreadyProcessed(contractMyid, function (err, isProcessed) {
       if (err) isProcessed = false
       logger.debug('mangeLog isProcessed: ' + isProcessed)
+      if (cliConfiguration.dev === true) return handleLog(data)
       if (isProcessed === false) {
         if (activeOracleInstance.isOracleEvent(data)) {
           if (cliConfiguration.dev !== true && BridgeCache.get(contractMyid) === true) return
@@ -1026,9 +1031,9 @@ function updateQuery (callbackInfo, contract, errors, callback) {
 }
 
 function createQuery (query, callback) {
-  request.post('https://api.oraclize.it/v1/query/create', {body: query, json: true, headers: { 'X-User-Agent': BRIDGE_NAME + '/' + BRIDGE_VERSION + ' (nodejs)' }}, function (error, response, body) {
-    logger.debug('oraclize HTTP create query body response', body)
-    if (error || (response.statusCode !== 200 && response.statusCode !== 401)) {
+  bridgeHttp.createQuery(query, BRIDGE_NAME + '/' + BRIDGE_VERSION + ' (nodejs)', function (error, result) {
+    logger.debug('oraclize HTTP create query body response', result)
+    if (error && error.fatal === false) {
       logger.error('HTTP query create request error ', error)
       logger.info('re-trying to create the query again in 20 seconds...')
       schedule.scheduleJob(moment().add(20, 'seconds').toDate(), function () {
@@ -1036,24 +1041,18 @@ function createQuery (query, callback) {
         query.when = newTime
         createQuery(query, callback)
       })
-    } else {
-      if (response.statusCode === 200) {
-        callback(body)
-      } else if (response.statusCode === 401) return logger.error('UNEXPECTED ANSWER FROM THE ORACLIZE ENGINE, PLEASE UPGRADE TO THE LATEST ' + BRIDGE_NAME.toUpperCase())
-    }
+    } else if (error && error.fatal === true) return logger.error('UNEXPECTED ANSWER FROM THE ORACLIZE ENGINE, PLEASE UPGRADE TO THE LATEST ' + BRIDGE_NAME.toUpperCase())
+    else return callback(result)
   })
 }
 
 function queryStatus (queryId, callback) {
-  request.get('https://api.oraclize.it/v1/query/' + queryId + '/status', {json: true, headers: { 'X-User-Agent': BRIDGE_NAME + '/' + BRIDGE_VERSION + ' (nodejs)' }}, function (error, response, body) {
-    if (error || (response.statusCode !== 200 && response.statusCode !== 401)) {
+  bridgeHttp.queryStatus(queryId, BRIDGE_NAME + '/' + BRIDGE_VERSION + ' (nodejs)', function (error, result) {
+    if (error && error.fatal === false) {
       logger.error('HTTP query status request error ', error)
       callback({'result': {}, 'bridge_request_error': true})
-    } else {
-      if (response.statusCode === 200) {
-        callback(body)
-      } else if (response.statusCode === 401) return logger.error('UNEXPECTED ANSWER FROM THE ORACLIZE ENGINE, PLEASE UPGRADE TO THE LATEST ' + BRIDGE_NAME.toUpperCase())
-    }
+    } else if (error && error.fatal === true) return logger.error('UNEXPECTED ANSWER FROM THE ORACLIZE ENGINE, PLEASE UPGRADE TO THE LATEST ' + BRIDGE_NAME.toUpperCase())
+    else return callback(result)
   })
 }
 

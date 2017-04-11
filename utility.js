@@ -7,17 +7,17 @@ var caminte = require('caminte')
 var BRIDGE_VERSION = require('./package.json').version
 
 /*
-  allow to migrate and update queries on another database (atm supported only lokijs --to--> tingodb) 
+  allow to migrate and update queries on another database (atm supported only lokijs --to--> tingodb)
 */
 
-var supportedDb = ['lokijs','tingodb']
+var supportedDb = ['lokijs', 'tingodb']
 var queriesDb
 
 var ops = stdio.getopt({
   'migrate': {description: 'migrate database'},
-  'from': {args: 1, description: 'type of database, supported: ',supportedDb},
+  'from': {args: 1, description: 'type of database, supported: ', supportedDb},
   'frompath': {args: 1, description: 'path of --from database'},
-  'to': {args: 1, description: 'type of database, supported: ',supportedDb},
+  'to': {args: 1, description: 'type of database, supported: ', supportedDb},
   'topath': {args: 1, description: 'path of --to database'},
   'conn': {args: 1, description: 'connector address'},
   'oar': {args: 1, description: 'oar address'},
@@ -31,21 +31,20 @@ if (ops.migrate && !ops.frompath || !ops.topath || supportedDb.indexOf(ops.from)
 
 if (ops.from === 'lokijs') {
   try {
-    var loki = require('lokijs');
-  } catch(e) {
+    var loki = require('lokijs')
+  } catch (e) {
     console.log(e)
     throw new Error('lokijs module not found, please install lokijs')
   }
-  var lokiDb = new loki(ops.frompath,{
-      autoload: true,
-      autoloadCallback: loadHandler,
-      autosave: true,
-      autosaveInterval: 10000
-    })
+  var lokiDb = new loki(ops.frompath, {
+    autoload: true,
+    autoloadCallback: loadHandler,
+    autosave: true,
+    autosaveInterval: 10000
+  })
 }
 
-
-function loadHandler(){
+function loadHandler () {
   if (ops.to !== 'tingodb') throw new Error('supported only lokijs --to--> tingodb')
   else {
     var DbSchema = caminte.Schema
@@ -78,29 +77,28 @@ function loadHandler(){
       'timestamp_db': {type: DbSchema.Date, default: Date.now() },
       'bridge_version': {type: DbSchema.String, default: BRIDGE_VERSION}
     })
-
   }
 
-  if(lokiDb.getCollection('queries')==null){
-    throw new Error("queries collection not found in database");
+  if (lokiDb.getCollection('queries') == null) {
+    throw new Error('queries collection not found in database')
   } else {
-    queriesDb = lokiDb.getCollection('queries');
+    queriesDb = lokiDb.getCollection('queries')
     var pendingQueries = queriesDb.find({
-      '$or':[{
-        'active':true
-      },{
-        'callback_complete':false
+      '$or': [{
+        'active': true
+      }, {
+        'callback_complete': false
       }]
-    });
-    
-    if(pendingQueries.length>0) console.log("Found "+pendingQueries.length+" pending queries")
+    })
+
+    if (pendingQueries.length > 0) console.log('Found ' + pendingQueries.length + ' pending queries')
     else return
 
-    for(var i=0;i<pendingQueries.length;i++){
-      var queryDoc = pendingQueries[i];
-      var targetUnix = parseInt(queryDoc.target_timestamp);
+    for (var i = 0; i < pendingQueries.length; i++) {
+      var queryDoc = pendingQueries[i]
+      var targetUnix = parseInt(queryDoc.target_timestamp)
       if (ops.del && ops.del.indexOf(queryDoc.myIdInitial) > -1) continue
-      var queryDocObj = {'http_myid': queryDoc.myid, 'contract_myid': queryDoc.myIdInitial, 'contract_address': queryDoc.contractAddress, 'proof_type': queryDoc.proofType, 'gas_limit': queryDoc.gasLimit};
+      var queryDocObj = {'http_myid': queryDoc.myid, 'contract_myid': queryDoc.myIdInitial, 'contract_address': queryDoc.contractAddress, 'proof_type': queryDoc.proofType, 'gas_limit': queryDoc.gasLimit}
       queryDocObj.oar = ops.oar
       queryDocObj.connector = ops.conn
       queryDocObj.cbAddress = ops.address
@@ -109,11 +107,10 @@ function loadHandler(){
       queryDocObj.event_tx = '0x00'
       queryDocObj.target_timestamp = targetUnix
       queryDocObj.block_tx_hash = '0x00'
-      console.log('added',queryDocObj)
+      console.log('added', queryDocObj)
       Query.create(queryDocObj)
     }
   }
-
 }
 
 function checkVersion () {

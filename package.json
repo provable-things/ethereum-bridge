@@ -5,11 +5,11 @@
   "main": "bridge.js",
   "dependencies": {
     "asn1": "0.2.3",
-    "async": "^2.2.0",
+    "async": "^2.3.0",
     "caminte": "0.3.6",
     "cbor": "^3.0.0",
     "colors": "^1.1.2",
-    "compare-versions": "^3.0.0",
+    "compare-versions": "^3.0.1",
     "eth-lightwallet": "^2.5.4",
     "ethereumjs-abi": "0.6.4",
     "ethereumjs-tx": "1.2.5",
@@ -24,7 +24,7 @@
     "request": "^2.81.0",
     "stdio": "^0.2.7",
     "tingodb": "^0.5.1",
-    "web3": "0.18.2",
+    "web3": "0.18.4",
     "winston": "^2.3.1"
   },
   "devDependencies": {
