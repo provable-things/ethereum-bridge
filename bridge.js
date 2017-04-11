@@ -2,7 +2,6 @@
 checkVersion()
 var readline = require('readline')
 var i18n = require('i18n')
-var versionCompare = require('compare-versions')
 var schedule = require('node-schedule')
 var bridgeUtil = require('./lib/bridge-util')
 var BridgeCliParse = require('./lib/bridge-cli-parse')
@@ -719,6 +718,7 @@ function manageLog (data) {
     BridgeDbManager().isAlreadyProcessed(contractMyid, function (err, isProcessed) {
       if (err) isProcessed = false
       logger.debug('mangeLog isProcessed: ' + isProcessed)
+      if (cliConfiguration.dev === true) return handleLog(data)
       if (isProcessed === false) {
         if (activeOracleInstance.isOracleEvent(data)) {
           if (cliConfiguration.dev !== true && BridgeCache.get(contractMyid) === true) return
