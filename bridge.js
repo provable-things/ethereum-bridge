@@ -66,6 +66,8 @@ var officialOar = []
 var currentInstance = 'latest'
 var basePrice = 0 // in ETH
 
+var bridgeObj = {'BRIDGE_NAME': BRIDGE_NAME, 'BRIDGE_VERSION': BRIDGE_VERSION}
+
 var cliOptions = {
   'BLOCKCHAIN_ABBRV': BLOCKCHAIN_ABBRV,
   'BLOCKCHAIN_BASE_UNIT': BLOCKCHAIN_BASE_UNIT,
@@ -408,7 +410,6 @@ function nodeError () {
 }
 
 function checkBridgeVersion (callback) {
-  var bridgeObj = {'BRIDGE_NAME': BRIDGE_NAME, 'BRIDGE_VERSION': BRIDGE_VERSION}
   bridgeHttp.getPlatformInfo(bridgeObj, function (error, body) {
     logger.debug('check bridge version body result', body)
     if (error) return callback(error, null)
@@ -610,7 +611,7 @@ function runLog () {
     })
   }
 
-  if (cliConfiguration['price-update-interval'] && cliConfiguration['price-usd']) priceUpdater(cliConfiguration['price-update-interval'])
+  if (cliConfiguration['price-update-interval'] && !cliConfiguration['price-usd']) priceUpdater(cliConfiguration['price-update-interval'])
 
   keepNodeAlive()
 
@@ -643,12 +644,19 @@ function runLog () {
 }
 
 function priceUpdater (seconds) {
-  setInterval(function () {
+  var priceUpdaterInterval = setInterval(function () {
     if (BlockchainInterface().isConnected() && BlockchainInterface().inter.syncing === false) {
-      var priceInUsd = 1 / cliConfiguration['price-usd']
-      activeOracleInstance.setBasePrice(activeOracleInstance.connector, priceInUsd, function (err, res) {
-        if (err) return logger.error('update price error', err)
-        else logger.info('base price updated to', priceInUsd, BLOCKCHAIN_BASE_UNIT)
+      bridgeHttp.getPlatformInfo(bridgeObj, function (error, body) {
+        if (error) return
+        try {
+          var priceInUsd = body.result.quotes.ETH
+          activeOracleInstance.setBasePrice(activeOracleInstance.connector, priceInUsd, function (err, res) {
+            if (err) return logger.error('update price error', err)
+            else logger.info('base price updated to', priceInUsd, BLOCKCHAIN_BASE_UNIT)
+          })
+        } catch (e) {
+          return  
+        }
       })
     }
   }, seconds * 1000)
