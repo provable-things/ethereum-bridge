@@ -297,7 +297,7 @@ function processPendingQueries (oar, connector, cbAddress) {
         logger.warn('forcing the resume of all pending queries')
       }
       asyncLoop(pendingQueries, function (thisPendingQuery, next) {
-        if (thisPendingQuery.callback_error === true) {
+        if (thisPendingQuery.callback_error === true && cliConfiguration.skipQueries !== true) {
           logger.warn('skipping', thisPendingQuery.contract_myid, 'because of __callback tx error')
           return next(null)
         } else if (thisPendingQuery.retry_number < 3 || cliConfiguration.resumeQueries) {
