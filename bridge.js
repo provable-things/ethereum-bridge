@@ -612,7 +612,7 @@ function runLog () {
 
   activeOracleInstance.latestBlockNumber = BlockchainInterface().inter.blockNumber
 
-  processPendingQueries()
+  if (cliConfiguration['oar'] || cliConfiguration['instance']) processPendingQueries()
 
   if (typeof cliConfiguration.blockRangeResume !== 'undefined' && cliConfiguration.blockRangeResume.length === 2) {
     setTimeout(function () {
