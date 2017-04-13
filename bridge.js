@@ -18,7 +18,8 @@ var AddressWatcher = require('./lib/address-watcher')
 var winston = require('winston')
 var colors = bridgeUtil.colors
 var async = require('async')
-var queue = async.queue(__callbackWrapper, 1)
+var callbackQueue = async.queue(__callbackWrapper, 1)
+var logsQueue = async.queue(logsWrapper, 1)
 var fs = require('fs')
 var path = require('path')
 var asyncLoop = require('node-async-loop')
@@ -686,7 +687,7 @@ function reorgListen () {
 function listenToLogs () {
   // listen to events
   BridgeLogEvents.on('new-log', function (log) {
-    if (typeof log !== 'undefined') manageLog(log)
+    if (typeof log !== 'undefined') logsQueue.push(log)
   })
 
   BridgeLogEvents.on('log-err', function (err) {
@@ -698,6 +699,13 @@ function listenToLogs () {
 
 function keepNodeAlive () {
   setInterval(function () {}, (1000 * 60) * 60)
+}
+
+function logsWrapper (data, callback) {
+  manageLog(data)
+  setTimeout(function () {
+    callback()
+  }, 200)
 }
 
 function manageLog (data) {
@@ -898,7 +906,9 @@ function queryComplete (queryComplObj) {
         'gas_limit': gasLimit
       }
       logger.info('sending __callback tx...', {'contract_myid': callbackObj.myid, 'contract_address': callbackObj.contract_address})
-      queue.push(callbackObj)
+      setTimeout(function () {
+        callbackQueue.push(callbackObj)
+      }, 500)
     })
   } catch (e) {
     logger.error('queryComplete error ', e)
