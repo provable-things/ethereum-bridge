@@ -113,3 +113,4 @@ If a new version is detected you can run `npm run update` to automatically donwl
   * `--loglevel` : change the default log level (available: 'error', 'warn', 'info', 'verbose', 'debug', 'stats') default: 'info'
   * `--non-interactive` : disable the interactive mode
   * `--no-hints` : disable logs hints
+  * `--gasprice` : set custom gas price

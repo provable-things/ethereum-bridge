@@ -162,7 +162,8 @@ var oraclizeConfiguration = {
   'deploy_gas': cliConfiguration.defaultGas,
   'account': cliConfiguration.account,
   'mode': mode,
-  'key_file': keyFilePath
+  'key_file': keyFilePath,
+  'gas_price': cliConfiguration.gasprice
 }
 
 if (cliConfiguration.abiconn || cliConfiguration.abioar) {
@@ -226,6 +227,7 @@ function oracleFromConfig (config) {
       config.onchain_config = {}
       config.onchain_config.pricing = pricingInfo
     }
+    config.gas_price = cliConfiguration.gasprice
     logger.debug('configuration file', config)
     activeOracleInstance = new OracleInstance(config)
     checkNodeConnection()
