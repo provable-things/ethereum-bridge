@@ -18,7 +18,8 @@ var AddressWatcher = require('./lib/address-watcher')
 var winston = require('winston')
 var colors = bridgeUtil.colors
 var async = require('async')
-var queue = async.queue(__callbackWrapper, 1)
+var callbackQueue = async.queue(__callbackWrapper, 1)
+var logsQueue = async.queue(logsWrapper, 1)
 var fs = require('fs')
 var path = require('path')
 var asyncLoop = require('node-async-loop')
@@ -64,7 +65,6 @@ var isTestRpc = false
 var pricingInfo = []
 var officialOar = []
 var currentInstance = 'latest'
-var basePrice = 0 // in ETH
 
 var bridgeObj = {'BRIDGE_NAME': BRIDGE_NAME, 'BRIDGE_VERSION': BRIDGE_VERSION}
 
@@ -98,7 +98,8 @@ var logger = new (winston.Logger)({
       }
     }),
     new (winston.transports.File)({
-      filename: cliConfiguration.logFilePath
+      filename: cliConfiguration.logFilePath,
+      level: 'debug'
     })
   ]
 })
@@ -161,7 +162,8 @@ var oraclizeConfiguration = {
   'deploy_gas': cliConfiguration.defaultGas,
   'account': cliConfiguration.account,
   'mode': mode,
-  'key_file': keyFilePath
+  'key_file': keyFilePath,
+  'gas_price': cliConfiguration.gasprice
 }
 
 if (cliConfiguration.abiconn || cliConfiguration.abioar) {
@@ -221,11 +223,11 @@ function toFullPath (filePath) {
 
 function oracleFromConfig (config) {
   try {
-    if ((pricingInfo.length > 0 && basePrice > 0 && typeof config.onchain_config === 'undefined') || cliConfiguration['remote-price'] === true) {
+    if ((pricingInfo.length > 0 && typeof config.onchain_config === 'undefined') || cliConfiguration['remote-price'] === true) {
       config.onchain_config = {}
       config.onchain_config.pricing = pricingInfo
-      config.onchain_config.base_price = basePrice
     }
+    config.gas_price = cliConfiguration.gasprice
     logger.debug('configuration file', config)
     activeOracleInstance = new OracleInstance(config)
     checkNodeConnection()
@@ -240,19 +242,6 @@ function oracleFromConfig (config) {
       activeOracleInstance.multiAddDSource(activeOracleInstance.connector, config.onchain_config.pricing, function (err, res) {
         if (err) logger.error('multiAddDSource error', err)
         else logger.info('multiAddDSource correctly updated')
-        if (cliConfiguration['update-price'] === true) {
-          activeOracleInstance.setBasePrice(activeOracleInstance.connector, config.onchain_config.base_price, function (err, res) {
-            if (err) return logger.error('update price error', err)
-            else logger.info('base price updated to', config.onchain_config.base_price, BLOCKCHAIN_BASE_UNIT)
-          })
-        }
-      })
-    }
-
-    if (cliConfiguration['update-price'] === true && cliConfiguration['update-ds'] !== true) {
-      activeOracleInstance.setBasePrice(activeOracleInstance.connector, config.onchain_config.base_price, function (err, res) {
-        if (err) return logger.error('update price error', err)
-        else logger.info('base price updated to', config.onchain_config.base_price, BLOCKCHAIN_BASE_UNIT)
       })
     }
 
@@ -311,7 +300,7 @@ function processPendingQueries (oar, connector, cbAddress) {
         logger.warn('forcing the resume of all pending queries')
       }
       asyncLoop(pendingQueries, function (thisPendingQuery, next) {
-        if (thisPendingQuery.callback_error === true) {
+        if (thisPendingQuery.callback_error === true && cliConfiguration.skipQueries !== true) {
           logger.warn('skipping', thisPendingQuery.contract_myid, 'because of __callback tx error')
           return next(null)
         } else if (thisPendingQuery.retry_number < 3 || cliConfiguration.resumeQueries) {
@@ -423,7 +412,6 @@ function checkBridgeVersion (callback) {
       if (typeof body.result.pricing !== 'undefined' && typeof body.result.quotes !== 'undefined') {
         var datasources = body.result.pricing.datasources
         var proofPricing = body.result.pricing.proofs
-        basePrice = body.result.quotes.ETH
         for (var i = 0; i < datasources.length; i++) {
           var thisDatasource = datasources[i]
           for (var j = 0; j < thisDatasource.proof_types.length; j++) {
@@ -448,10 +436,9 @@ function checkBridgeVersion (callback) {
 
 function deployOraclize () {
   try {
-    if (pricingInfo.length > 0 && basePrice > 0) {
+    if (pricingInfo.length > 0) {
       oraclizeConfiguration.onchain_config = {}
       oraclizeConfiguration.onchain_config.pricing = pricingInfo
-      oraclizeConfiguration.onchain_config.base_price = basePrice
     }
     activeOracleInstance = new OracleInstance(oraclizeConfiguration)
     checkNodeConnection()
@@ -535,7 +522,7 @@ function deployOraclize () {
       oraclizeConfiguration.oar = result.oar
       logger.info('address resolver (OAR) deployed to:', oraclizeConfiguration.oar)
       logger.debug('OAR deployment result', result)
-      if (cliConfiguration['disable-price'] === true || pricingInfo.length === 0 || basePrice <= 0) {
+      if (cliConfiguration['disable-price'] === true || pricingInfo.length === 0) {
         logger.warn('skipping pricing update...')
         callback(null, null)
       } else {
@@ -628,7 +615,7 @@ function runLog () {
 
   activeOracleInstance.latestBlockNumber = BlockchainInterface().inter.blockNumber
 
-  processPendingQueries()
+  if (cliConfiguration['oar'] || cliConfiguration['instance']) processPendingQueries()
 
   if (typeof cliConfiguration.blockRangeResume !== 'undefined' && cliConfiguration.blockRangeResume.length === 2) {
     setTimeout(function () {
@@ -644,8 +631,8 @@ function runLog () {
 }
 
 function priceUpdater (seconds) {
-  var priceUpdaterInterval = setInterval(function () {
-    if (BlockchainInterface().isConnected() && BlockchainInterface().inter.syncing === false) {
+  setInterval(function () {
+    if (BlockchainInterface().isConnected() && bridgeUtil.isSyncing(BlockchainInterface().inter.syncing) === false) {
       bridgeHttp.getPlatformInfo(bridgeObj, function (error, body) {
         if (error) return
         try {
@@ -654,9 +641,7 @@ function priceUpdater (seconds) {
             if (err) return logger.error('update price error', err)
             else logger.info('base price updated to', priceInUsd, BLOCKCHAIN_BASE_UNIT)
           })
-        } catch (e) {
-          return  
-        }
+        } catch (e) {}
       })
     }
   }, seconds * 1000)
@@ -704,7 +689,7 @@ function reorgListen () {
 function listenToLogs () {
   // listen to events
   BridgeLogEvents.on('new-log', function (log) {
-    if (typeof log !== 'undefined') manageLog(log)
+    if (typeof log !== 'undefined') logsQueue.push(log)
   })
 
   BridgeLogEvents.on('log-err', function (err) {
@@ -716,6 +701,13 @@ function listenToLogs () {
 
 function keepNodeAlive () {
   setInterval(function () {}, (1000 * 60) * 60)
+}
+
+function logsWrapper (data, callback) {
+  manageLog(data)
+  setTimeout(function () {
+    callback()
+  }, 200)
 }
 
 function manageLog (data) {
@@ -916,7 +908,9 @@ function queryComplete (queryComplObj) {
         'gas_limit': gasLimit
       }
       logger.info('sending __callback tx...', {'contract_myid': callbackObj.myid, 'contract_address': callbackObj.contract_address})
-      queue.push(callbackObj)
+      setTimeout(function () {
+        callbackQueue.push(callbackObj)
+      }, 500)
     })
   } catch (e) {
     logger.error('queryComplete error ', e)
@@ -1030,11 +1024,9 @@ function updateQuery (callbackInfo, contract, errors, callback) {
 
   BridgeDbManager().updateDbQuery(callbackInfo.myid, dbUpdateObj, function (err, res) {
     if (err) logger.error(err)
-    if (contract === null) return logger.error('transaction hash not found, callback tx database not updated', contract)
-    BridgeCache.set('callback_' + callbackInfo.myid, BlockchainInterface().inter.blockNumber, 600)
-    setTimeout(function () {
-      callback()
-    }, 600)
+    if (contract === null) logger.error('transaction hash not found, callback tx database not updated', contract)
+    else BridgeCache.set('callback_' + callbackInfo.myid, BlockchainInterface().inter.blockNumber, 600)
+    return callback()
   })
 }
 
@@ -1068,8 +1060,7 @@ function checkCallbackTxs () {
   setInterval(function () {
     logger.debug('checking invalid __callback transactions')
     if (!activeOracleInstance.oar || !activeOracleInstance.account || !activeOracleInstance.connector) return
-    var isSyncing = BlockchainInterface().inter.syncing
-    if (BlockchainInterface().isConnected() && (isSyncing === false || (typeof isSyncing === 'object' && isSyncing.currentBlock > isSyncing.highestBlock))) {
+    if (BlockchainInterface().isConnected() && bridgeUtil.isSyncing(BlockchainInterface().inter.syncing) === false) {
       CallbackTx.find({'where': {'tx_confirmed': false, 'oar': activeOracleInstance.oar, 'cbAddress': activeOracleInstance.account}}, function (err, res) {
         if (err) return logger.error('failed to fetch callback tx', err)
         logger.debug('__callback transactions list:', res)

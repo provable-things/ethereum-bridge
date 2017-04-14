@@ -106,12 +106,11 @@ If a new version is detected you can run `npm run update` to automatically donwl
   * `--skip` : skip all pending queries
   * `--dev` : skip contract myid check and pending queries (useful for local testing)
   * `--disable-deterministic-oar` : Deploy the address resolver (OAR) with your main account (note: you need to update your contract with the new generated address)
-  * `--disable-price` : skip datasource pricing and base price connector update
+  * `--disable-price` : skip datasource pricing and base price connector update (only on new instances)
   * `--disable-reorg` : disable re-org block listen
   * `--update-ds` : update datasource pricing only (pricing (if found) will be loaded from your local instance file, otherwise will be fetched from the remote oraclize API)
-  * `--update-price` : update base price only (base price (if found) will be loaded from your local instance file, otherwise will be fetched from the remote oraclize API)
-  * `--remote-price` : force the remote pricing fetch
   * `--price-usd` : set the USD base price
   * `--loglevel` : change the default log level (available: 'error', 'warn', 'info', 'verbose', 'debug', 'stats') default: 'info'
   * `--non-interactive` : disable the interactive mode
   * `--no-hints` : disable logs hints
+  * `--gasprice` : set custom gas price
