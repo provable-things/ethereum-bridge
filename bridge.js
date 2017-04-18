@@ -60,7 +60,6 @@ var BridgeCache = BridgeDbManager().cache
 var mode = 'active'
 var keyFilePath = toFullPath('./config/instance/keys.json')
 var configFilePath = ''
-var latestBlockNumber = -1
 var isTestRpc = false
 var pricingInfo = []
 var officialOar = []
@@ -740,9 +739,10 @@ function handleLog (log) {
     logger.info('new ' + log.event + ' event', log)
     var contractMyid = log['parsed_log']['contract_myid']
     BridgeCache.set(contractMyid, true)
+    var blockNumber = BlockchainInterface().inter.blockNumber
+    if (blockNumber > activeOracleInstance.latestBlockNumber) activeOracleInstance.latestBlockNumber = blockNumber
     var eventTx = log['transactionHash']
     var blockHashTx = log['blockHash']
-    activeOracleInstance.latestBlockNumber = BlockchainInterface().inter.blockNumber
     var contractAddress = log['parsed_log']['contract_address']
     var datasource = log['parsed_log']['datasource']
     var formula = log['parsed_log']['formula']
