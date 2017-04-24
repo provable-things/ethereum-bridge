@@ -305,7 +305,7 @@ function processPendingQueries (oar, connector, cbAddress) {
         } else if (thisPendingQuery.retry_number < 3 || cliConfiguration.resumeQueries) {
           var targetUnix = parseInt(thisPendingQuery.target_timestamp)
           var queryTimeDiff = targetUnix < moment().unix() ? 0 : targetUnix
-          logger.info('re-processing query', {'contact_address:': thisPendingQuery.contact_address, 'contact_myid': thisPendingQuery.contract_myid, 'http_myid': thisPendingQuery.http_myid})
+          logger.info('re-processing query', {'contract_address:': thisPendingQuery.contract_address, 'contact_myid': thisPendingQuery.contract_myid, 'http_myid': thisPendingQuery.http_myid})
           if (queryTimeDiff <= 0) {
             checkQueryStatus(thisPendingQuery)
           } else {
