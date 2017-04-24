@@ -706,7 +706,7 @@ function logsWrapper (data, callback) {
   manageLog(data)
   setTimeout(function () {
     callback()
-  }, 600)
+  }, 800)
 }
 
 function manageLog (data) {
@@ -908,9 +908,7 @@ function queryComplete (queryComplObj) {
         'gas_limit': gasLimit
       }
       logger.info('sending __callback tx...', {'contract_myid': callbackObj.myid, 'contract_address': callbackObj.contract_address})
-      setTimeout(function () {
-        callbackQueue.push(callbackObj)
-      }, 500)
+      callbackQueue.push(callbackObj)
     })
   } catch (e) {
     logger.error('queryComplete error ', e)
@@ -918,15 +916,17 @@ function queryComplete (queryComplObj) {
 }
 
 function __callbackWrapper (callbackObj, cb) {
-  logger.debug('__callbackWrapper object:', callbackObj)
-  activeOracleInstance.__callback(callbackObj, function (err, contract) {
-    if (err) {
-      updateQuery(callbackObj, null, err, cb)
-      return logger.error('callback tx error, contract myid: ' + callbackObj.myid, err)
-    }
-    logger.info('contract ' + callbackObj.contract_address + ' __callback tx sent, transaction hash:', contract.transactionHash, callbackObj)
-    updateQuery(callbackObj, contract, null, cb)
-  })
+  setTimeout(function () {
+    logger.debug('__callbackWrapper object:', callbackObj)
+    activeOracleInstance.__callback(callbackObj, function (err, contract) {
+      if (err) {
+        updateQuery(callbackObj, null, err, cb)
+        return logger.error('callback tx error, contract myid: ' + callbackObj.myid, err)
+      }
+      logger.info('contract ' + callbackObj.contract_address + ' __callback tx sent, transaction hash:', contract.transactionHash, callbackObj)
+      updateQuery(callbackObj, contract, null, cb)
+    })
+  }, 800)
 }
 
 function checkCallbackTx (myid, callback) {
