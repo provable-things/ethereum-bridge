@@ -706,7 +706,7 @@ function logsWrapper (data, callback) {
   manageLog(data)
   setTimeout(function () {
     callback()
-  }, 200)
+  }, 600)
 }
 
 function manageLog (data) {
@@ -721,6 +721,7 @@ function manageLog (data) {
       if (isProcessed === false) {
         if (activeOracleInstance.isOracleEvent(data)) {
           if (cliConfiguration.dev !== true && BridgeCache.get(contractMyid) === true) return
+          BridgeCache.set(contractMyid, true)
           if (typeof data.removed !== 'undefined' && data.removed === true) return logger.error('this log was removed because of orphaned block, rejected tx or re-org, skipping...')
           if ((typeof data.malformed !== 'undefined' && data.malformed === true) || typeof data.parsed_log === 'undefined') return logger.error('malformed log, skipping...')
           handleLog(data)
@@ -738,7 +739,6 @@ function handleLog (log) {
   try {
     logger.info('new ' + log.event + ' event', log)
     var contractMyid = log['parsed_log']['contract_myid']
-    BridgeCache.set(contractMyid, true)
     var blockNumber = BlockchainInterface().inter.blockNumber
     if (blockNumber > activeOracleInstance.latestBlockNumber) activeOracleInstance.latestBlockNumber = blockNumber
     var eventTx = log['transactionHash']
@@ -967,7 +967,7 @@ function manageErrors (err) {
           // fetch 'lost' queries
           if (activeOracleInstance.latestBlockNumber < nodeStatus) {
             logger.info('trying to recover "lost" queries...')
-            BridgeLogManager.fetchLogsByBlock(latestBlockNumber, nodeStatus)
+            BridgeLogManager.fetchLogsByBlock(activeOracleInstance.latestBlockNumber, nodeStatus)
           }
         }
       } catch (e) {
