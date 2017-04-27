@@ -706,7 +706,7 @@ function logsWrapper (data, callback) {
   manageLog(data)
   setTimeout(function () {
     callback()
-  }, 800)
+  }, 250)
 }
 
 function manageLog (data) {
@@ -916,17 +916,15 @@ function queryComplete (queryComplObj) {
 }
 
 function __callbackWrapper (callbackObj, cb) {
-  setTimeout(function () {
-    logger.debug('__callbackWrapper object:', callbackObj)
-    activeOracleInstance.__callback(callbackObj, function (err, contract) {
-      if (err) {
-        updateQuery(callbackObj, null, err, cb)
-        return logger.error('callback tx error, contract myid: ' + callbackObj.myid, err)
-      }
-      logger.info('contract ' + callbackObj.contract_address + ' __callback tx sent, transaction hash:', contract.transactionHash, callbackObj)
-      updateQuery(callbackObj, contract, null, cb)
-    })
-  }, 800)
+  logger.debug('__callbackWrapper object:', callbackObj)
+  activeOracleInstance.__callback(callbackObj, function (err, contract) {
+    if (err) {
+      updateQuery(callbackObj, null, err, cb)
+      return logger.error('callback tx error, contract myid: ' + callbackObj.myid, err)
+    }
+    logger.info('contract ' + callbackObj.contract_address + ' __callback tx sent, transaction hash:', contract.transactionHash, callbackObj)
+    updateQuery(callbackObj, contract, null, cb)
+  })
 }
 
 function checkCallbackTx (myid, callback) {
@@ -996,6 +994,9 @@ function updateQuery (callbackInfo, contract, errors, callback) {
   } else {
     dataDbUpdate = {'query_active': false, 'callback_complete': true}
   }
+
+  if (cliConfiguration.dev === true) return callback()
+
   var dbUpdateObj = {
     'query': dataDbUpdate,
     'callback': {}
@@ -1026,7 +1027,9 @@ function updateQuery (callbackInfo, contract, errors, callback) {
     if (err) logger.error(err)
     if (contract === null) logger.error('transaction hash not found, callback tx database not updated', contract)
     else BridgeCache.set('callback_' + callbackInfo.myid, BlockchainInterface().inter.blockNumber, 600)
-    return callback()
+    setTimeout(function () {
+      return callback()
+    }, 250)
   })
 }
 
