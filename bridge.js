@@ -974,7 +974,7 @@ function manageErrors (err) {
         }
       }
     }, 30000)
-  }
+  } else logger.error(err)
 }
 
 function queryCompleteErrors (err) {
