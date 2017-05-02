@@ -720,6 +720,7 @@ function manageLog (data) {
       if (cliConfiguration.dev === true) return handleLog(data)
       if (isProcessed === false) {
         if (activeOracleInstance.isOracleEvent(data)) {
+          logger.debug('cache content', BridgeCache.get(contractMyid))
           if (cliConfiguration.dev !== true && BridgeCache.get(contractMyid) === true) return
           BridgeCache.set(contractMyid, true)
           if (typeof data.removed !== 'undefined' && data.removed === true) return logger.error('this log was removed because of orphaned block, rejected tx or re-org, skipping...')
