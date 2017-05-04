@@ -723,6 +723,7 @@ function manageLog (data) {
           logger.debug('cache content', BridgeCache.get(contractMyid))
           if (cliConfiguration.dev !== true && BridgeCache.get(contractMyid) === true) return
           BridgeCache.set(contractMyid, true)
+          logger.debug('cache content after', BridgeCache.get(contractMyid))
           if (typeof data.removed !== 'undefined' && data.removed === true) return logger.error('this log was removed because of orphaned block, rejected tx or re-org, skipping...')
           if ((typeof data.malformed !== 'undefined' && data.malformed === true) || typeof data.parsed_log === 'undefined') return logger.error('malformed log, skipping...')
           handleLog(data)
@@ -917,6 +918,8 @@ function queryComplete (queryComplObj) {
 }
 
 function __callbackWrapper (callbackObj, cb) {
+  if (BridgeCache.get(callbackObj.myid + '__callback') === true) return
+  BridgeCache.set(callbackObj.myid + '__callback', true, 100)
   logger.debug('__callbackWrapper object:', callbackObj)
   activeOracleInstance.__callback(callbackObj, function (err, contract) {
     if (err) {
