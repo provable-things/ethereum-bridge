@@ -919,7 +919,8 @@ function queryComplete (queryComplObj) {
 
 function __callbackWrapper (callbackObj, cb) {
   if (BridgeCache.get(callbackObj.myid + '__callback') === true) return cb()
-  BridgeCache.set(callbackObj.myid + '__callback', true, 100)
+  var ttlTx = cliConfiguration.dev === true ? 1 : 100
+  BridgeCache.set(callbackObj.myid + '__callback', true, ttlTx)
   logger.debug('__callbackWrapper object:', callbackObj)
   activeOracleInstance.__callback(callbackObj, function (err, contract) {
     if (err) {
