@@ -60,7 +60,6 @@ var BridgeCache = BridgeDbManager().cache
 var mode = 'active'
 var keyFilePath = toFullPath('./config/instance/keys.json')
 var configFilePath = ''
-var latestBlockNumber = -1
 var isTestRpc = false
 var pricingInfo = []
 var officialOar = []
@@ -306,7 +305,7 @@ function processPendingQueries (oar, connector, cbAddress) {
         } else if (thisPendingQuery.retry_number < 3 || cliConfiguration.resumeQueries) {
           var targetUnix = parseInt(thisPendingQuery.target_timestamp)
           var queryTimeDiff = targetUnix < moment().unix() ? 0 : targetUnix
-          logger.info('re-processing query', {'contact_address:': thisPendingQuery.contact_address, 'contact_myid': thisPendingQuery.contract_myid, 'http_myid': thisPendingQuery.http_myid})
+          logger.info('re-processing query', {'contract_address:': thisPendingQuery.contract_address, 'contact_myid': thisPendingQuery.contract_myid, 'http_myid': thisPendingQuery.http_myid})
           if (queryTimeDiff <= 0) {
             checkQueryStatus(thisPendingQuery)
           } else {
@@ -707,7 +706,7 @@ function logsWrapper (data, callback) {
   manageLog(data)
   setTimeout(function () {
     callback()
-  }, 200)
+  }, 250)
 }
 
 function manageLog (data) {
@@ -721,7 +720,10 @@ function manageLog (data) {
       if (cliConfiguration.dev === true) return handleLog(data)
       if (isProcessed === false) {
         if (activeOracleInstance.isOracleEvent(data)) {
+          logger.debug('cache content', BridgeCache.get(contractMyid))
           if (cliConfiguration.dev !== true && BridgeCache.get(contractMyid) === true) return
+          BridgeCache.set(contractMyid, true)
+          logger.debug('cache content after', BridgeCache.get(contractMyid))
           if (typeof data.removed !== 'undefined' && data.removed === true) return logger.error('this log was removed because of orphaned block, rejected tx or re-org, skipping...')
           if ((typeof data.malformed !== 'undefined' && data.malformed === true) || typeof data.parsed_log === 'undefined') return logger.error('malformed log, skipping...')
           handleLog(data)
@@ -739,10 +741,10 @@ function handleLog (log) {
   try {
     logger.info('new ' + log.event + ' event', log)
     var contractMyid = log['parsed_log']['contract_myid']
-    BridgeCache.set(contractMyid, true)
+    var blockNumber = BlockchainInterface().inter.blockNumber
+    if (blockNumber > activeOracleInstance.latestBlockNumber) activeOracleInstance.latestBlockNumber = blockNumber
     var eventTx = log['transactionHash']
     var blockHashTx = log['blockHash']
-    activeOracleInstance.latestBlockNumber = BlockchainInterface().inter.blockNumber
     var contractAddress = log['parsed_log']['contract_address']
     var datasource = log['parsed_log']['datasource']
     var formula = log['parsed_log']['formula']
@@ -908,9 +910,7 @@ function queryComplete (queryComplObj) {
         'gas_limit': gasLimit
       }
       logger.info('sending __callback tx...', {'contract_myid': callbackObj.myid, 'contract_address': callbackObj.contract_address})
-      setTimeout(function () {
-        callbackQueue.push(callbackObj)
-      }, 500)
+      callbackQueue.push(callbackObj)
     })
   } catch (e) {
     logger.error('queryComplete error ', e)
@@ -918,6 +918,8 @@ function queryComplete (queryComplObj) {
 }
 
 function __callbackWrapper (callbackObj, cb) {
+  if (BridgeCache.get(callbackObj.myid + '__callback') === true) return cb()
+  BridgeCache.set(callbackObj.myid + '__callback', true, 100)
   logger.debug('__callbackWrapper object:', callbackObj)
   activeOracleInstance.__callback(callbackObj, function (err, contract) {
     if (err) {
@@ -967,7 +969,7 @@ function manageErrors (err) {
           // fetch 'lost' queries
           if (activeOracleInstance.latestBlockNumber < nodeStatus) {
             logger.info('trying to recover "lost" queries...')
-            BridgeLogManager.fetchLogsByBlock(latestBlockNumber, nodeStatus)
+            BridgeLogManager.fetchLogsByBlock(activeOracleInstance.latestBlockNumber, nodeStatus)
           }
         }
       } catch (e) {
@@ -976,7 +978,7 @@ function manageErrors (err) {
         }
       }
     }, 30000)
-  }
+  } else logger.error(err)
 }
 
 function queryCompleteErrors (err) {
@@ -996,6 +998,9 @@ function updateQuery (callbackInfo, contract, errors, callback) {
   } else {
     dataDbUpdate = {'query_active': false, 'callback_complete': true}
   }
+
+  if (cliConfiguration.dev === true) return callback()
+
   var dbUpdateObj = {
     'query': dataDbUpdate,
     'callback': {}
@@ -1026,7 +1031,9 @@ function updateQuery (callbackInfo, contract, errors, callback) {
     if (err) logger.error(err)
     if (contract === null) logger.error('transaction hash not found, callback tx database not updated', contract)
     else BridgeCache.set('callback_' + callbackInfo.myid, BlockchainInterface().inter.blockNumber, 600)
-    return callback()
+    setTimeout(function () {
+      return callback()
+    }, 250)
   })
 }
 
