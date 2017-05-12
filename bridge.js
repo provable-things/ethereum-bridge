@@ -1050,6 +1050,7 @@ function updateQuery (callbackInfo, contract, errors, callback) {
 }
 
 function createQuery (query, callback) {
+  logger.debug('HTTP create query content', query)
   bridgeHttp.createQuery(query, BRIDGE_NAME + '/' + BRIDGE_VERSION + ' (nodejs)', function (error, result) {
     logger.debug('oraclize HTTP create query body response', result)
     if (error && error.fatal === false) {

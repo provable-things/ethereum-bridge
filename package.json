@@ -6,8 +6,8 @@
   "dependencies": {
     "asn1": "0.2.3",
     "async": "^2.4.0",
+    "borc": "^2.0.2",
     "caminte": "0.3.6",
-    "cbor": "^3.0.0",
     "colorize": "^0.1.0",
     "colors": "^1.1.2",
     "compare-versions": "^3.0.1",
