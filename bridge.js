@@ -256,19 +256,30 @@ function oracleFromConfig (config) {
         if (answ.match(/y/)) {
           rl.close()
           console.log('Please wait...')
-          activeOracleInstance.deployConnector(function (err, connectorRes) {
+          async.waterfall([
+            function (callback) {
+              activeOracleInstance.deployConnector(callback)
+            },
+            function setPricing (result, callback) {
+              logger.info('successfully deployed a new connector', result.connector)
+              oraclizeConfiguration.connector = result.connector
+              if (cliConfiguration['disable-price'] === true || pricingInfo.length === 0) {
+                logger.warn('skipping pricing update...')
+                callback(null, null)
+              } else {
+                logger.info('updating connector pricing...')
+                activeOracleInstance.setPricing(result.connector, callback)
+              }
+            },
+            function updateOar (result, callback) {
+              logger.debug('pricing update result', result)
+              activeOracleInstance.setAddr(activeOracleInstance.oar, activeOracleInstance.connector, callback)
+            }], function (err, res) {
             if (err) throw new Error(err)
-            if (connectorRes.success === true) {
-              logger.info('successfully generated a new connector', connectorRes.connector)
-              activeOracleInstance.setAddr(activeOracleInstance.oar, connectorRes.connector, function (err, res) {
-                if (err) throw new Error(err)
-                if (res.success === true) {
-                  oraclizeConfiguration.connector = connectorRes.connector
-                  logger.info('successfully updated the Address Resolver')
-                  bridgeUtil.saveJsonFile(configFilePath, oraclizeConfiguration)
-                  runLog()
-                }
-              })
+            if (res.success === true) {
+              logger.info('successfully updated the Address Resolver')
+              bridgeUtil.saveJsonFile(configFilePath, oraclizeConfiguration)
+              runLog()
             }
           })
         } else throw new Error('exiting no authorization given, please remove the --newconn flag')
