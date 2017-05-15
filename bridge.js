@@ -1039,7 +1039,9 @@ function updateQuery (callbackInfo, contract, errors, callback) {
     dbUpdateObj['callback'].gas_limit = contract.gasUsed
   }
 
-  dbUpdateObj['callback'].proof = dbUpdateObj['callback'].proof.length > 50 || typeof dbUpdateObj['callback'].proof !== 'string' ? '' : dbUpdateObj['callback'].proof
+  if (dbUpdateObj['callback'].proof && typeof dbUpdateObj['callback'].proof !== 'string') {
+    dbUpdateObj['callback'].proof = ''
+  }
 
   BridgeDbManager().updateDbQuery(callbackInfo.myid, dbUpdateObj, function (err, res) {
     if (err) logger.error(err)
