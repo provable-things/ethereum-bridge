@@ -256,19 +256,30 @@ function oracleFromConfig (config) {
         if (answ.match(/y/)) {
           rl.close()
           console.log('Please wait...')
-          activeOracleInstance.deployConnector(function (err, connectorRes) {
+          async.waterfall([
+            function (callback) {
+              activeOracleInstance.deployConnector(callback)
+            },
+            function setPricing (result, callback) {
+              logger.info('successfully deployed a new connector', result.connector)
+              oraclizeConfiguration.connector = result.connector
+              if (cliConfiguration['disable-price'] === true || pricingInfo.length === 0) {
+                logger.warn('skipping pricing update...')
+                callback(null, null)
+              } else {
+                logger.info('updating connector pricing...')
+                activeOracleInstance.setPricing(result.connector, callback)
+              }
+            },
+            function updateOar (result, callback) {
+              logger.debug('pricing update result', result)
+              activeOracleInstance.setAddr(activeOracleInstance.oar, activeOracleInstance.connector, callback)
+            }], function (err, res) {
             if (err) throw new Error(err)
-            if (connectorRes.success === true) {
-              logger.info('successfully generated a new connector', connectorRes.connector)
-              activeOracleInstance.setAddr(activeOracleInstance.oar, connectorRes.connector, function (err, res) {
-                if (err) throw new Error(err)
-                if (res.success === true) {
-                  oraclizeConfiguration.connector = connectorRes.connector
-                  logger.info('successfully updated the Address Resolver')
-                  bridgeUtil.saveJsonFile(configFilePath, oraclizeConfiguration)
-                  runLog()
-                }
-              })
+            if (res.success === true) {
+              logger.info('successfully updated the Address Resolver')
+              bridgeUtil.saveJsonFile(configFilePath, oraclizeConfiguration)
+              runLog()
             }
           })
         } else throw new Error('exiting no authorization given, please remove the --newconn flag')
@@ -590,7 +601,7 @@ function runLog () {
   logger.info('Listening @ ' + activeOracleInstance.connector + ' (Oraclize Connector)\n')
 
   if (cliConfiguration['price-usd']) {
-    var priceInUsd = 1 / cliConfiguration['price-usd']
+    var priceInUsd = bridgeUtil.normalizePrice(1 / cliConfiguration['price-usd'])
     activeOracleInstance.setBasePrice(activeOracleInstance.connector, priceInUsd, function (err, res) {
       if (err) return logger.error('update price error', err)
       else logger.info('base price updated to', priceInUsd, BLOCKCHAIN_BASE_UNIT)
@@ -909,6 +920,9 @@ function queryComplete (queryComplObj) {
         'contract_address': bridgeCore.ethUtil.addHexPrefix(contractAddr),
         'gas_limit': gasLimit
       }
+      if (BridgeCache.get(callbackObj.myid + '__callback') === true) return
+      var ttlTx = cliConfiguration.dev === true ? 1 : 100
+      BridgeCache.set(callbackObj.myid + '__callback', true, ttlTx)
       logger.info('sending __callback tx...', {'contract_myid': callbackObj.myid, 'contract_address': callbackObj.contract_address})
       callbackQueue.push(callbackObj)
     })
@@ -918,9 +932,6 @@ function queryComplete (queryComplObj) {
 }
 
 function __callbackWrapper (callbackObj, cb) {
-  if (BridgeCache.get(callbackObj.myid + '__callback') === true) return cb()
-  var ttlTx = cliConfiguration.dev === true ? 1 : 100
-  BridgeCache.set(callbackObj.myid + '__callback', true, ttlTx)
   logger.debug('__callbackWrapper object:', callbackObj)
   activeOracleInstance.__callback(callbackObj, function (err, contract) {
     if (err) {
@@ -1028,6 +1039,8 @@ function updateQuery (callbackInfo, contract, errors, callback) {
     dbUpdateObj['callback'].gas_limit = contract.gasUsed
   }
 
+  dbUpdateObj['callback'].proof = dbUpdateObj['callback'].proof.length > 50 || typeof dbUpdateObj['callback'].proof !== 'string' ? '' : dbUpdateObj['callback'].proof
+
   BridgeDbManager().updateDbQuery(callbackInfo.myid, dbUpdateObj, function (err, res) {
     if (err) logger.error(err)
     if (contract === null) logger.error('transaction hash not found, callback tx database not updated', contract)
@@ -1039,6 +1052,7 @@ function updateQuery (callbackInfo, contract, errors, callback) {
 }
 
 function createQuery (query, callback) {
+  logger.debug('HTTP create query content', query)
   bridgeHttp.createQuery(query, BRIDGE_NAME + '/' + BRIDGE_VERSION + ' (nodejs)', function (error, result) {
     logger.debug('oraclize HTTP create query body response', result)
     if (error && error.fatal === false) {

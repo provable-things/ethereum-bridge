@@ -6,14 +6,14 @@
   "dependencies": {
     "asn1": "0.2.3",
     "async": "^2.4.0",
+    "borc": "^2.0.2",
     "caminte": "0.3.6",
-    "cbor": "^3.0.0",
     "colorize": "^0.1.0",
     "colors": "^1.1.2",
     "compare-versions": "^3.0.1",
     "eth-lightwallet": "^2.5.4",
     "ethereumjs-abi": "0.6.4",
-    "ethereumjs-tx": "^1.3.0",
+    "ethereumjs-tx": "^1.3.1",
     "ethereumjs-util": "5.1.1",
     "i18n": "^0.8.3",
     "moment": "^2.18.1",
@@ -26,7 +26,7 @@
     "stdio": "^0.2.7",
     "tingodb": "^0.5.1",
     "utf8": "^2.1.2",
-    "web3": "0.18.4",
+    "web3": "0.19.0",
     "winston": "^2.3.1"
   },
   "devDependencies": {
