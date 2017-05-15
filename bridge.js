@@ -601,7 +601,7 @@ function runLog () {
   logger.info('Listening @ ' + activeOracleInstance.connector + ' (Oraclize Connector)\n')
 
   if (cliConfiguration['price-usd']) {
-    var priceInUsd = bridgeUtil.toFinite(1 / cliConfiguration['price-usd'])
+    var priceInUsd = bridgeUtil.normalizePrice(1 / cliConfiguration['price-usd'])
     activeOracleInstance.setBasePrice(activeOracleInstance.connector, priceInUsd, function (err, res) {
       if (err) return logger.error('update price error', err)
       else logger.info('base price updated to', priceInUsd, BLOCKCHAIN_BASE_UNIT)
@@ -1038,6 +1038,8 @@ function updateQuery (callbackInfo, contract, errors, callback) {
     dbUpdateObj['callback'].contract_address = contract.to
     dbUpdateObj['callback'].gas_limit = contract.gasUsed
   }
+
+  dbUpdateObj['callback'].proof = dbUpdateObj['callback'].proof.length > 50 || typeof dbUpdateObj['callback'].proof !== 'string' ? '' : dbUpdateObj['callback'].proof
 
   BridgeDbManager().updateDbQuery(callbackInfo.myid, dbUpdateObj, function (err, res) {
     if (err) logger.error(err)
