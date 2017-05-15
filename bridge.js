@@ -601,7 +601,7 @@ function runLog () {
   logger.info('Listening @ ' + activeOracleInstance.connector + ' (Oraclize Connector)\n')
 
   if (cliConfiguration['price-usd']) {
-    var priceInUsd = 1 / cliConfiguration['price-usd']
+    var priceInUsd = bridgeUtil.toFinite(1 / cliConfiguration['price-usd'])
     activeOracleInstance.setBasePrice(activeOracleInstance.connector, priceInUsd, function (err, res) {
       if (err) return logger.error('update price error', err)
       else logger.info('base price updated to', priceInUsd, BLOCKCHAIN_BASE_UNIT)
