@@ -609,6 +609,7 @@ function runLog () {
   }
 
   if (cliConfiguration['price-update-interval'] && !cliConfiguration['price-usd']) priceUpdater(cliConfiguration['price-update-interval'])
+  if (cliConfiguration['random-ds-update-interval']) randDsHashUpdater(cliConfiguration['random-ds-update-interval'])
 
   keepNodeAlive()
 
@@ -639,6 +640,24 @@ function runLog () {
   AddressWatcher({'address': activeOracleInstance.account, 'logger': logger, 'balance_limit': 10000000000000000})
   AddressWatcher().init()
 }
+
+function randDsHashUpdater (seconds) {
+  setInterval(function () {
+    if (BlockchainInterface().isConnected() && bridgeUtil.isSyncing(BlockchainInterface().inter.syncing) === false) {
+      bridgeHttp.getPlatformInfo(bridgeObj, function (error, body) {
+        if (error) return
+        try {
+          var hashList = body.result.datasources.random.sessionPubKeysHash
+          activeOracleInstance.updateRandDsHash(activeOracleInstance.connector, hashList, function (err, res) {
+            if (err) return logger.error('update random ds hash error', err)
+            else logger.info('random datasource hash list updated to:', hashList)
+          })
+        } catch (e) {}
+      })
+    }
+  }, seconds * 1000)
+}
+
 
 function priceUpdater (seconds) {
   setInterval(function () {
