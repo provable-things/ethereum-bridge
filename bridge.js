@@ -271,8 +271,68 @@ function oracleFromConfig (config) {
                 activeOracleInstance.setPricing(result.connector, callback)
               }
             },
-            function updateOar (result, callback) {
+            function updateState (result, callback) {
               logger.debug('pricing update result', result)
+              if (cliConfiguration['connector-state']) {
+                var contractState = JSON.parse(fs.readFileSync(cliConfiguration['connector-state']).toString())
+                var addressListProof = Object.keys(contractState['addr_proofType'])
+                var proofList = []
+                for (var i = 0; i < addressListProof.length; i++) {
+                  proofList.push(contractState['addr_proofType'][addressListProof[i]])
+                }
+                if (proofList.length !== addressListProof.length) throw new Error('Address list and proof list doesn\'t match')
+
+                var addressListGasPrice = Object.keys(contractState['addr_gasPrice'])
+                var gasPriceList = []
+                for (var i = 0; i < addressListGasPrice.length; i++) {
+                  gasPriceList.push(contractState['addr_gasPrice'][addressListGasPrice[i]])
+                }
+                if (gasPriceList.length !== addressListGasPrice.length) throw new Error('Address list and gasPrice list doesn\'t match')
+
+                var addressListProofChunk = bridgeUtil.createGroupedArray(addressListProof, 100)
+                var proofListChunk = bridgeUtil.createGroupedArray(proofList, 100)
+
+                for (var i = 0; i < addressListProofChunk.length; i++) {
+                  var addresses = addressListProofChunk[i]
+                  addressListProofChunk[i] = []
+                  addressListProofChunk[i][0] = addresses
+                  addressListProofChunk[i][1] = proofListChunk[i]
+                }
+
+                asyncLoop(addressListProofChunk, function (chunk, next) {
+                  activeOracleInstance.updateProofMapping(activeOracleInstance.connector, chunk[0], chunk[1], function (err, result) {
+                    if (err) return next(err)
+                    return next(null)
+                  })
+                }, function (err) {
+                  if (err) logger.error('loop error', err)
+                  else logger.info('proof mapping updated')
+                })
+
+                var addressListGasPriceChunk = bridgeUtil.createGroupedArray(addressListGasPrice, 100)
+                var gasPriceListChunk = bridgeUtil.createGroupedArray(gasPriceList, 100)
+
+                for (var i = 0; i < addressListGasPriceChunk.length; i++) {
+                  var addresses = addressListGasPriceChunk[i]
+                  addressListGasPriceChunk[i] = []
+                  addressListGasPriceChunk[i][0] = addresses
+                  addressListGasPriceChunk[i][1] = gasPriceListChunk[i]
+                }
+
+                asyncLoop(addressListGasPriceChunk, function (chunk, next) {
+                  activeOracleInstance.updateGasPriceMapping(activeOracleInstance.connector, chunk[0], chunk[1], function (err, result) {
+                    if (err) return next(err)
+                    return next(null)
+                  })
+                }, function (err) {
+                  if (err) logger.error('loop error', err)
+                  else return callback(null, null)
+                })
+              } else return callback(null, null)
+            },
+            function updateOar (result, callback) {
+              logger.debug('script result', result)
+              logger.info('gasPrice mapping updated')
               activeOracleInstance.setAddr(activeOracleInstance.oar, activeOracleInstance.connector, callback)
             }], function (err, res) {
             if (err) throw new Error(err)
@@ -657,7 +717,6 @@ function randDsHashUpdater (seconds) {
     }
   }, seconds * 1000)
 }
-
 
 function priceUpdater (seconds) {
   setInterval(function () {
