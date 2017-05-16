@@ -840,6 +840,7 @@ function handleLog (log) {
     var time = log['parsed_log']['timestamp']
     var gasLimit = log['parsed_log']['gaslimit']
     var proofType = log['parsed_log']['proofType']
+    var gasPrice = log['parsed_log']['gasPrice'] || -1
 
     var unixTime = moment().unix()
     if (!bridgeUtil.isValidTime(time, unixTime)) return logger.error('the query is too far in the future, skipping log...')
@@ -870,7 +871,8 @@ function handleLog (log) {
         'event_tx': eventTx,
         'block_tx_hash': blockHashTx,
         'proof_type': proofType,
-        'gas_limit': gasLimit
+        'gas_limit': gasLimit,
+        'gas_price': gasPrice
       }
 
       BridgeDbManager().createDbQuery(newQueryObj, function (err, res) {
@@ -882,7 +884,8 @@ function handleLog (log) {
             'contract_myid': contractMyid,
             'contract_address': contractAddress,
             'proof_type': proofType,
-            'gas_limit': gasLimit
+            'gas_limit': gasLimit,
+            'gas_price': gasPrice
           }
           checkQueryStatus(queryObj)
         } else {
@@ -904,7 +907,8 @@ function handleLog (log) {
             'event_tx': eventTx,
             'block_tx_hash': blockHashTx,
             'proof_type': proofType,
-            'gas_limit': gasLimit
+            'gas_limit': gasLimit,
+            'gas_price': gasPrice
           })
         }
       })
@@ -940,6 +944,7 @@ function checkQueryStatus (queryObj) {
         'proof_type': proofType,
         'contract_address': contractAddress,
         'gas_limit': gasLimit,
+        'gas_price': queryObj.gas_price,
         'force_query': forceQuery
       }
       if (bridgeUtil.checkErrors(data) === true) {
@@ -982,6 +987,7 @@ function queryComplete (queryComplObj) {
     var proofType = queryComplObj.proof_type
     var myid = queryComplObj.contract_myid
     var gasLimit = queryComplObj.gas_limit
+    var gasPrice = queryComplObj.gas_price
 
     if (typeof gasLimit === 'undefined' || typeof myid === 'undefined' || typeof contractAddr === 'undefined' || typeof proofType === 'undefined') {
       return queryCompleteErrors('queryComplete error, __callback arguments are empty')
@@ -996,7 +1002,8 @@ function queryComplete (queryComplObj) {
         'proof': proof,
         'proof_type': proofType,
         'contract_address': bridgeCore.ethUtil.addHexPrefix(contractAddr),
-        'gas_limit': gasLimit
+        'gas_limit': gasLimit,
+        'gas_price': gasPrice
       }
       if (BridgeCache.get(callbackObj.myid + '__callback') === true) return
       var ttlTx = cliConfiguration.dev === true ? 1 : 100
