@@ -668,8 +668,7 @@ function runLog () {
     })
   }
 
-  if (cliConfiguration['price-update-interval'] && !cliConfiguration['price-usd']) priceUpdater(cliConfiguration['price-update-interval'])
-  if (cliConfiguration['random-ds-update-interval']) randDsHashUpdater(cliConfiguration['random-ds-update-interval'])
+  if ((cliConfiguration['price-update-interval'] && !cliConfiguration['price-usd']) || cliConfiguration['random-ds-update-interval']) fetchPlatform()
 
   keepNodeAlive()
 
@@ -701,19 +700,37 @@ function runLog () {
   AddressWatcher().init()
 }
 
+function fetchPlatform () {
+  var seconds = parseInt(cliConfiguration['price-update-interval']) < parseInt(cliConfiguration['random-ds-update-interval']) ? cliConfiguration['price-update-interval'] : cliConfiguration['random-ds-update-interval']
+  setInterval(function () {
+    bridgeHttp.getPlatformInfo(bridgeObj, function (error, body) {
+      if (error) return
+      logger.debug('fetch platform result', body)
+      BridgeCache.set('platform_info', body.result, 0)
+    })
+  }, (seconds - 1) * 1000)
+  setTimeout(function () {
+    if (cliConfiguration['random-ds-update-interval']) randDsHashUpdater(cliConfiguration['random-ds-update-interval'])
+    if (cliConfiguration['price-update-interval']) priceUpdater(cliConfiguration['price-update-interval'])
+  }, 3000)
+}
+
 function randDsHashUpdater (seconds) {
   setInterval(function () {
     if (BlockchainInterface().isConnected() && bridgeUtil.isSyncing(BlockchainInterface().inter.syncing) === false) {
-      bridgeHttp.getPlatformInfo(bridgeObj, function (error, body) {
-        if (error) return
-        try {
-          var hashList = body.result.datasources.random.sessionPubKeysHash
-          activeOracleInstance.updateRandDsHash(activeOracleInstance.connector, hashList, function (err, res) {
-            if (err) return logger.error('update random ds hash error', err)
-            else logger.info('random datasource hash list updated to:', hashList)
-          })
-        } catch (e) {}
-      })
+      try {
+        var body = BridgeCache.get('platform_info')
+        if (typeof body.datasources === 'undefined') return
+        var hashList = body.datasources.random.sessionPubKeysHash
+        if (JSON.stringify(BridgeCache.get('sessionPubKeysHash')) === JSON.stringify(hashList)) return
+        BridgeCache.set('sessionPubKeysHash', hashList)
+        activeOracleInstance.updateRandDsHash(activeOracleInstance.connector, hashList, function (err, res) {
+          if (err) return logger.error('update random ds hash error', err)
+          else logger.info('random datasource hash list updated to:', hashList)
+        })
+      } catch (e) {
+        logger.error('random ds hash failed to update', e)
+      }
     }
   }, seconds * 1000)
 }
@@ -721,16 +738,19 @@ function randDsHashUpdater (seconds) {
 function priceUpdater (seconds) {
   setInterval(function () {
     if (BlockchainInterface().isConnected() && bridgeUtil.isSyncing(BlockchainInterface().inter.syncing) === false) {
-      bridgeHttp.getPlatformInfo(bridgeObj, function (error, body) {
-        if (error) return
-        try {
-          var priceInUsd = body.result.quotes.ETH
-          activeOracleInstance.setBasePrice(activeOracleInstance.connector, priceInUsd, function (err, res) {
-            if (err) return logger.error('update price error', err)
-            else logger.info('base price updated to', priceInUsd, BLOCKCHAIN_BASE_UNIT)
-          })
-        } catch (e) {}
-      })
+      try {
+        var body = BridgeCache.get('platform_info')
+        if (typeof body.quotes === 'undefined') return
+        var priceInUsd = body.quotes.ETH
+        if (BridgeCache.get('baseprice') === priceInUsd) return
+        BridgeCache.set('baseprice', priceInUsd)
+        activeOracleInstance.setBasePrice(activeOracleInstance.connector, priceInUsd, function (err, res) {
+          if (err) return logger.error('update price error', err)
+          else logger.info('base price updated to', priceInUsd, BLOCKCHAIN_BASE_UNIT)
+        })
+      } catch (e) {
+        logger.error('baseprice failed to update', e)
+      }
     }
   }, seconds * 1000)
 }
@@ -840,7 +860,7 @@ function handleLog (log) {
     var time = log['parsed_log']['timestamp']
     var gasLimit = log['parsed_log']['gaslimit']
     var proofType = log['parsed_log']['proofType']
-    var gasPrice = log['parsed_log']['gasPrice'] || -1
+    var gasPrice = log['parsed_log']['gasPrice'] || null
 
     var unixTime = moment().unix()
     if (!bridgeUtil.isValidTime(time, unixTime)) return logger.error('the query is too far in the future, skipping log...')
