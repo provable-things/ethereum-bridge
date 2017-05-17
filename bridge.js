@@ -870,7 +870,13 @@ function handleLog (log) {
       'datasource': datasource,
       'query': formula,
       'id2': bridgeCore.ethUtil.stripHexPrefix(contractMyid),
-      'proof_type': bridgeUtil.toInt(proofType)
+      'proof_type': bridgeUtil.toInt(proofType),
+      'context': {
+        'name': bridgeUtil.getContext({'prefix': BLOCKCHAIN_ABBRV, 'random': true}),
+        'protocol': BLOCKCHAIN_ABBRV.toLowerCase(),
+        'type': 'test',
+        'relative_timestamp': log['block_timestamp']
+      }
     }
     createQuery(query, function (data) {
       if (typeof data !== 'object' || typeof data.result === 'undefined' || typeof data.result.id === 'undefined') return logger.error('no HTTP myid found, skipping log...')
