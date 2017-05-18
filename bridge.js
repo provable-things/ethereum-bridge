@@ -701,18 +701,27 @@ function runLog () {
 }
 
 function fetchPlatform () {
-  var seconds = parseInt(cliConfiguration['price-update-interval']) < parseInt(cliConfiguration['random-ds-update-interval']) ? cliConfiguration['price-update-interval'] : cliConfiguration['random-ds-update-interval']
+  var usdInterval = parseInt(cliConfiguration['price-update-interval'])
+  var randomDsInterval = parseInt(cliConfiguration['random-ds-update-interval'])
+  var intervalArr = []
+  if (!isNaN(usdInterval)) { intervalArr.push(usdInterval) }
+  if (!isNaN(randomDsInterval)) { intervalArr.push(randomDsInterval) }
+
+  var seconds = Math.min(...intervalArr)
+
+  if (isNaN(seconds) || seconds <= 1) return
+  console.log(seconds)
   setInterval(function () {
     bridgeHttp.getPlatformInfo(bridgeObj, function (error, body) {
       if (error) return
       logger.debug('fetch platform result', body)
       BridgeCache.set('platform_info', body.result, 0)
     })
-  }, (seconds - 1) * 1000)
+  }, seconds * 1000)
   setTimeout(function () {
     if (cliConfiguration['random-ds-update-interval']) randDsHashUpdater(cliConfiguration['random-ds-update-interval'])
     if (cliConfiguration['price-update-interval']) priceUpdater(cliConfiguration['price-update-interval'])
-  }, 3000)
+  }, 3100)
 }
 
 function randDsHashUpdater (seconds) {
