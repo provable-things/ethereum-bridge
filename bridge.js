@@ -710,7 +710,7 @@ function fetchPlatform () {
   var seconds = Math.min(...intervalArr)
 
   if (isNaN(seconds) || seconds <= 1) return
-  console.log(seconds)
+
   setInterval(function () {
     bridgeHttp.getPlatformInfo(bridgeObj, function (error, body) {
       if (error) return
@@ -731,7 +731,9 @@ function randDsHashUpdater (seconds) {
         var body = BridgeCache.get('platform_info')
         if (typeof body.datasources === 'undefined') return
         var hashList = body.datasources.random.sessionPubKeysHash
-        if (JSON.stringify(BridgeCache.get('sessionPubKeysHash')) === JSON.stringify(hashList)) return
+        var hashListInCache = BridgeCache.get('sessionPubKeysHash')
+        logger.debug('hash list cache', hashListInCache, 'hash list from API', hashList)
+        if (bridgeUtil.compareObject(hashListInCache, hashList)) return
         BridgeCache.set('sessionPubKeysHash', hashList)
         activeOracleInstance.updateRandDsHash(activeOracleInstance.connector, hashList, function (err, res) {
           if (err) return logger.error('update random ds hash error', err)
