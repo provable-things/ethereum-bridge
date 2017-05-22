@@ -5,7 +5,7 @@
   "main": "bridge.js",
   "dependencies": {
     "asn1": "0.2.3",
-    "async": "^2.4.0",
+    "async": "^2.4.1",
     "borc": "^2.0.2",
     "caminte": "0.3.6",
     "colorize": "^0.1.0",
@@ -21,7 +21,7 @@
     "multihashes": "^0.4.5",
     "node-async-loop": "^1.2.2",
     "node-cache": "^4.1.1",
-    "node-schedule": "^1.2.1",
+    "node-schedule": "^1.2.3",
     "pragma-singleton": "1.0.3",
     "request": "^2.81.0",
     "stdio": "^0.2.7",
@@ -34,7 +34,7 @@
     "standard": "*"
   },
   "scripts": {
-    "update": "git pull && npm install",
+    "update": "git pull origin master && npm install",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "engines": {
