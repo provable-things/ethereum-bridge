@@ -1,8 +1,8 @@
-##Binary info
+## Binary info
 
-###oraclizeConnector.binary
+### oraclizeConnector.binary
 
-Compiler version: 0.4.9-364da425
+Compiler version: 0.4.11-68ef5810
 
 Optimization: Enabled
 
@@ -11,7 +11,7 @@ Contract source: [oraclizeConnector.sol](../ethereum-api/connectors/oraclizeConn
 Contract name: Oraclize
 
 
-###addressResolver.binary
+### addressResolver.binary
 
 Compiler version: 0.3.6-3fc68da5
 

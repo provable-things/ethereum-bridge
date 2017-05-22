@@ -271,8 +271,68 @@ function oracleFromConfig (config) {
                 activeOracleInstance.setPricing(result.connector, callback)
               }
             },
-            function updateOar (result, callback) {
+            function updateState (result, callback) {
               logger.debug('pricing update result', result)
+              if (cliConfiguration['connector-state']) {
+                var contractState = JSON.parse(fs.readFileSync(cliConfiguration['connector-state']).toString())
+                var addressListProof = Object.keys(contractState['addr_proofType'])
+                var proofList = []
+                for (var i = 0; i < addressListProof.length; i++) {
+                  proofList.push(contractState['addr_proofType'][addressListProof[i]])
+                }
+                if (proofList.length !== addressListProof.length) throw new Error('Address list and proof list doesn\'t match')
+
+                var addressListGasPrice = Object.keys(contractState['addr_gasPrice'])
+                var gasPriceList = []
+                for (var i = 0; i < addressListGasPrice.length; i++) {
+                  gasPriceList.push(contractState['addr_gasPrice'][addressListGasPrice[i]])
+                }
+                if (gasPriceList.length !== addressListGasPrice.length) throw new Error('Address list and gasPrice list doesn\'t match')
+
+                var addressListProofChunk = bridgeUtil.createGroupedArray(addressListProof, 100)
+                var proofListChunk = bridgeUtil.createGroupedArray(proofList, 100)
+
+                for (var i = 0; i < addressListProofChunk.length; i++) {
+                  var addresses = addressListProofChunk[i]
+                  addressListProofChunk[i] = []
+                  addressListProofChunk[i][0] = addresses
+                  addressListProofChunk[i][1] = proofListChunk[i]
+                }
+
+                asyncLoop(addressListProofChunk, function (chunk, next) {
+                  activeOracleInstance.updateProofMapping(activeOracleInstance.connector, chunk[0], chunk[1], function (err, result) {
+                    if (err) return next(err)
+                    return next(null)
+                  })
+                }, function (err) {
+                  if (err) logger.error('loop error', err)
+                  else logger.info('proof mapping updated')
+                })
+
+                var addressListGasPriceChunk = bridgeUtil.createGroupedArray(addressListGasPrice, 100)
+                var gasPriceListChunk = bridgeUtil.createGroupedArray(gasPriceList, 100)
+
+                for (var i = 0; i < addressListGasPriceChunk.length; i++) {
+                  var addresses = addressListGasPriceChunk[i]
+                  addressListGasPriceChunk[i] = []
+                  addressListGasPriceChunk[i][0] = addresses
+                  addressListGasPriceChunk[i][1] = gasPriceListChunk[i]
+                }
+
+                asyncLoop(addressListGasPriceChunk, function (chunk, next) {
+                  activeOracleInstance.updateGasPriceMapping(activeOracleInstance.connector, chunk[0], chunk[1], function (err, result) {
+                    if (err) return next(err)
+                    return next(null)
+                  })
+                }, function (err) {
+                  if (err) logger.error('loop error', err)
+                  else return callback(null, null)
+                })
+              } else return callback(null, null)
+            },
+            function updateOar (result, callback) {
+              logger.debug('script result', result)
+              logger.info('gasPrice mapping updated')
               activeOracleInstance.setAddr(activeOracleInstance.oar, activeOracleInstance.connector, callback)
             }], function (err, res) {
             if (err) throw new Error(err)
@@ -608,7 +668,7 @@ function runLog () {
     })
   }
 
-  if (cliConfiguration['price-update-interval'] && !cliConfiguration['price-usd']) priceUpdater(cliConfiguration['price-update-interval'])
+  if ((cliConfiguration['price-update-interval'] && !cliConfiguration['price-usd']) || cliConfiguration['random-ds-update-interval']) fetchPlatform()
 
   keepNodeAlive()
 
@@ -640,19 +700,68 @@ function runLog () {
   AddressWatcher().init()
 }
 
+function fetchPlatform () {
+  var usdInterval = parseInt(cliConfiguration['price-update-interval'])
+  var randomDsInterval = parseInt(cliConfiguration['random-ds-update-interval'])
+  var intervalArr = []
+  if (!isNaN(usdInterval)) { intervalArr.push(usdInterval) }
+  if (!isNaN(randomDsInterval)) { intervalArr.push(randomDsInterval) }
+
+  var seconds = Math.min(...intervalArr)
+
+  if (isNaN(seconds) || seconds <= 1) return
+
+  setInterval(function () {
+    bridgeHttp.getPlatformInfo(bridgeObj, function (error, body) {
+      if (error) return
+      logger.debug('fetch platform result', body)
+      BridgeCache.set('platform_info', body.result, 0)
+    })
+  }, seconds * 1000)
+  setTimeout(function () {
+    if (cliConfiguration['random-ds-update-interval']) randDsHashUpdater(cliConfiguration['random-ds-update-interval'])
+    if (cliConfiguration['price-update-interval']) priceUpdater(cliConfiguration['price-update-interval'])
+  }, 3100)
+}
+
+function randDsHashUpdater (seconds) {
+  setInterval(function () {
+    if (BlockchainInterface().isConnected() && bridgeUtil.isSyncing(BlockchainInterface().inter.syncing) === false) {
+      try {
+        var body = BridgeCache.get('platform_info')
+        if (typeof body.datasources === 'undefined') return
+        var hashList = body.datasources.random.sessionPubKeysHash
+        var hashListInCache = BridgeCache.get('sessionPubKeysHash')
+        logger.debug('hash list cache', hashListInCache, 'hash list from API', hashList)
+        if (bridgeUtil.compareObject(hashListInCache, hashList)) return
+        BridgeCache.set('sessionPubKeysHash', hashList, 0)
+        activeOracleInstance.updateRandDsHash(activeOracleInstance.connector, hashList, function (err, res) {
+          if (err) return logger.error('update random ds hash error', err)
+          else logger.info('random datasource hash list updated to:', hashList)
+        })
+      } catch (e) {
+        logger.error('random ds hash failed to update', e)
+      }
+    }
+  }, seconds * 1000)
+}
+
 function priceUpdater (seconds) {
   setInterval(function () {
     if (BlockchainInterface().isConnected() && bridgeUtil.isSyncing(BlockchainInterface().inter.syncing) === false) {
-      bridgeHttp.getPlatformInfo(bridgeObj, function (error, body) {
-        if (error) return
-        try {
-          var priceInUsd = body.result.quotes.ETH
-          activeOracleInstance.setBasePrice(activeOracleInstance.connector, priceInUsd, function (err, res) {
-            if (err) return logger.error('update price error', err)
-            else logger.info('base price updated to', priceInUsd, BLOCKCHAIN_BASE_UNIT)
-          })
-        } catch (e) {}
-      })
+      try {
+        var body = BridgeCache.get('platform_info')
+        if (typeof body.quotes === 'undefined') return
+        var priceInUsd = body.quotes.ETH
+        if (BridgeCache.get('baseprice') === priceInUsd) return
+        BridgeCache.set('baseprice', priceInUsd, 0)
+        activeOracleInstance.setBasePrice(activeOracleInstance.connector, priceInUsd, function (err, res) {
+          if (err) return logger.error('update price error', err)
+          else logger.info('base price updated to', priceInUsd, BLOCKCHAIN_BASE_UNIT)
+        })
+      } catch (e) {
+        logger.error('baseprice failed to update', e)
+      }
     }
   }, seconds * 1000)
 }
@@ -762,6 +871,7 @@ function handleLog (log) {
     var time = log['parsed_log']['timestamp']
     var gasLimit = log['parsed_log']['gaslimit']
     var proofType = log['parsed_log']['proofType']
+    var gasPrice = log['parsed_log']['gasPrice'] || null
 
     var unixTime = moment().unix()
     if (!bridgeUtil.isValidTime(time, unixTime)) return logger.error('the query is too far in the future, skipping log...')
@@ -771,7 +881,13 @@ function handleLog (log) {
       'datasource': datasource,
       'query': formula,
       'id2': bridgeCore.ethUtil.stripHexPrefix(contractMyid),
-      'proof_type': bridgeUtil.toInt(proofType)
+      'proof_type': bridgeUtil.toInt(proofType),
+      'context': {
+        'name': bridgeUtil.getContext({'prefix': BLOCKCHAIN_ABBRV, 'random': true}),
+        'protocol': BLOCKCHAIN_ABBRV.toLowerCase(),
+        'type': 'test',
+        'relative_timestamp': log['block_timestamp']
+      }
     }
     createQuery(query, function (data) {
       if (typeof data !== 'object' || typeof data.result === 'undefined' || typeof data.result.id === 'undefined') return logger.error('no HTTP myid found, skipping log...')
@@ -792,7 +908,8 @@ function handleLog (log) {
         'event_tx': eventTx,
         'block_tx_hash': blockHashTx,
         'proof_type': proofType,
-        'gas_limit': gasLimit
+        'gas_limit': gasLimit,
+        'gas_price': gasPrice
       }
 
       BridgeDbManager().createDbQuery(newQueryObj, function (err, res) {
@@ -804,7 +921,8 @@ function handleLog (log) {
             'contract_myid': contractMyid,
             'contract_address': contractAddress,
             'proof_type': proofType,
-            'gas_limit': gasLimit
+            'gas_limit': gasLimit,
+            'gas_price': gasPrice
           }
           checkQueryStatus(queryObj)
         } else {
@@ -826,7 +944,8 @@ function handleLog (log) {
             'event_tx': eventTx,
             'block_tx_hash': blockHashTx,
             'proof_type': proofType,
-            'gas_limit': gasLimit
+            'gas_limit': gasLimit,
+            'gas_price': gasPrice
           })
         }
       })
@@ -862,6 +981,7 @@ function checkQueryStatus (queryObj) {
         'proof_type': proofType,
         'contract_address': contractAddress,
         'gas_limit': gasLimit,
+        'gas_price': queryObj.gas_price,
         'force_query': forceQuery
       }
       if (bridgeUtil.checkErrors(data) === true) {
@@ -904,6 +1024,7 @@ function queryComplete (queryComplObj) {
     var proofType = queryComplObj.proof_type
     var myid = queryComplObj.contract_myid
     var gasLimit = queryComplObj.gas_limit
+    var gasPrice = queryComplObj.gas_price
 
     if (typeof gasLimit === 'undefined' || typeof myid === 'undefined' || typeof contractAddr === 'undefined' || typeof proofType === 'undefined') {
       return queryCompleteErrors('queryComplete error, __callback arguments are empty')
@@ -918,7 +1039,8 @@ function queryComplete (queryComplObj) {
         'proof': proof,
         'proof_type': proofType,
         'contract_address': bridgeCore.ethUtil.addHexPrefix(contractAddr),
-        'gas_limit': gasLimit
+        'gas_limit': gasLimit,
+        'gas_price': gasPrice
       }
       if (BridgeCache.get(callbackObj.myid + '__callback') === true) return
       var ttlTx = cliConfiguration.dev === true ? 1 : 100

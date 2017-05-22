@@ -110,6 +110,19 @@ contract Oraclize {
     mapping (bytes32 => uint) price;
     mapping (bytes32 => uint) price_multiplier;
     bytes32[] dsources;
+
+    bytes32[] public randomDS_sessionPubKeysHash;
+
+    function randomDS_updateSessionPubKeysHash(bytes32[] _newSessionPubKeysHash) onlyadmin {
+        randomDS_sessionPubKeysHash.length = 0;
+        for (uint i=0; i<_newSessionPubKeysHash.length; i++) randomDS_sessionPubKeysHash.push(_newSessionPubKeysHash[i]);
+    }
+
+    function randomDS_getSessionPubKeyHash() constant returns (bytes32) {
+        uint i = uint(sha3(reqc[msg.sender]))%randomDS_sessionPubKeysHash.length;
+        return randomDS_sessionPubKeysHash[i];
+    }
+
     function useCoupon(string _coupon) {
         coupon = sha3(_coupon);
     }
