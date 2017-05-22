@@ -734,7 +734,7 @@ function randDsHashUpdater (seconds) {
         var hashListInCache = BridgeCache.get('sessionPubKeysHash')
         logger.debug('hash list cache', hashListInCache, 'hash list from API', hashList)
         if (bridgeUtil.compareObject(hashListInCache, hashList)) return
-        BridgeCache.set('sessionPubKeysHash', hashList)
+        BridgeCache.set('sessionPubKeysHash', hashList, 0)
         activeOracleInstance.updateRandDsHash(activeOracleInstance.connector, hashList, function (err, res) {
           if (err) return logger.error('update random ds hash error', err)
           else logger.info('random datasource hash list updated to:', hashList)
@@ -754,7 +754,7 @@ function priceUpdater (seconds) {
         if (typeof body.quotes === 'undefined') return
         var priceInUsd = body.quotes.ETH
         if (BridgeCache.get('baseprice') === priceInUsd) return
-        BridgeCache.set('baseprice', priceInUsd)
+        BridgeCache.set('baseprice', priceInUsd, 0)
         activeOracleInstance.setBasePrice(activeOracleInstance.connector, priceInUsd, function (err, res) {
           if (err) return logger.error('update price error', err)
           else logger.info('base price updated to', priceInUsd, BLOCKCHAIN_BASE_UNIT)
