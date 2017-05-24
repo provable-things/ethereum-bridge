@@ -62,6 +62,7 @@ var keyFilePath = toFullPath('./config/instance/keys.json')
 var configFilePath = ''
 var isTestRpc = false
 var pricingInfo = []
+var basePrice = 0
 var officialOar = []
 var currentInstance = 'latest'
 
@@ -225,6 +226,7 @@ function oracleFromConfig (config) {
     if ((pricingInfo.length > 0 && typeof config.onchain_config === 'undefined') || cliConfiguration['remote-price'] === true) {
       config.onchain_config = {}
       config.onchain_config.pricing = pricingInfo
+      config.onchain_config.base_price = basePrice
     }
     config.gas_price = cliConfiguration.gasprice
     logger.debug('configuration file', config)
@@ -480,6 +482,7 @@ function checkBridgeVersion (callback) {
         logger.warn('\n************************************************************************\nA NEW VERSION OF THIS TOOL HAS BEEN DETECTED\nIT IS HIGHLY RECOMMENDED THAT YOU ALWAYS RUN THE LATEST VERSION, PLEASE UPGRADE TO ' + BRIDGE_NAME.toUpperCase() + ' ' + latestVersion + '\n************************************************************************\n')
       }
       if (typeof body.result.pricing !== 'undefined' && typeof body.result.quotes !== 'undefined') {
+        basePrice = body.result.quotes[BLOCKCHAIN_ABBRV.toUpperCase()]
         var datasources = body.result.pricing.datasources
         var proofPricing = body.result.pricing.proofs
         for (var i = 0; i < datasources.length; i++) {
@@ -509,6 +512,7 @@ function deployOraclize () {
     if (pricingInfo.length > 0) {
       oraclizeConfiguration.onchain_config = {}
       oraclizeConfiguration.onchain_config.pricing = pricingInfo
+      oraclizeConfiguration.onchain_config.base_price = basePrice
     }
     activeOracleInstance = new OracleInstance(oraclizeConfiguration)
     checkNodeConnection()
