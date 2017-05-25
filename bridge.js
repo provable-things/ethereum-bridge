@@ -1059,14 +1059,17 @@ function queryComplete (queryComplObj) {
 
 function __callbackWrapper (callbackObj, cb) {
   logger.debug('__callbackWrapper object:', callbackObj)
-  activeOracleInstance.__callback(callbackObj, function (err, contract) {
-    if (err) {
-      updateQuery(callbackObj, null, err, cb)
-      return logger.error('callback tx error, contract myid: ' + callbackObj.myid, err)
-    }
-    logger.info('contract ' + callbackObj.contract_address + ' __callback tx sent, transaction hash:', contract.transactionHash, callbackObj)
-    updateQuery(callbackObj, contract, null, cb)
-  })
+  var callbackDelay = isTestRpc ? 1000 : 300
+  setTimeout(function () {
+    activeOracleInstance.__callback(callbackObj, function (err, contract) {
+      if (err) {
+        updateQuery(callbackObj, null, err, cb)
+        return logger.error('callback tx error, contract myid: ' + callbackObj.myid, err)
+      }
+      logger.info('contract ' + callbackObj.contract_address + ' __callback tx sent, transaction hash:', contract.transactionHash, callbackObj)
+      updateQuery(callbackObj, contract, null, cb)
+    })
+  }, callbackDelay)
 }
 
 function checkCallbackTx (myid, callback) {
