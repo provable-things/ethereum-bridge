@@ -477,6 +477,8 @@ function checkBridgeVersion (callback) {
     try {
       var checkOutdated = bridgeUtil.checkIfOutdated(bridgeObj, body)
       if (checkOutdated === false) return callback(new Error('Bridge name not found'), null)
+      var distribution = body.result.distributions[BRIDGE_NAME.toLowerCase()]
+      if (typeof distribution.motd !== 'undefined' && distribution.motd.length > 0) logger.info('\n========================\n', distribution.motd, '\n========================')
       if (checkOutdated.outdated === true) {
         var latestVersion = checkOutdated.version
         logger.warn('\n************************************************************************\nA NEW VERSION OF THIS TOOL HAS BEEN DETECTED\nIT IS HIGHLY RECOMMENDED THAT YOU ALWAYS RUN THE LATEST VERSION, PLEASE UPGRADE TO ' + BRIDGE_NAME.toUpperCase() + ' ' + latestVersion + '\n************************************************************************\n')
@@ -1050,7 +1052,9 @@ function queryComplete (queryComplObj) {
       var ttlTx = cliConfiguration.dev === true ? 1 : 100
       BridgeCache.set(callbackObj.myid + '__callback', true, ttlTx)
       logger.info('sending __callback tx...', {'contract_myid': callbackObj.myid, 'contract_address': callbackObj.contract_address})
-      callbackQueue.push(callbackObj)
+      callbackQueue.push(callbackObj, function (err) {
+        if (err) logger.error('Callback queue error', err)
+      })
     })
   } catch (e) {
     logger.error('queryComplete error ', e)
