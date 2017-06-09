@@ -140,6 +140,7 @@ logger.info('you are running ' + BRIDGE_NAME, '- version: ' + BRIDGE_VERSION)
 logger.info('saving logs to:', cliConfiguration.logFilePath)
 
 var oraclizeConfiguration = {
+  'context_name': bridgeUtil.getContext({'prefix': BLOCKCHAIN_ABBRV, 'random': true}),
   'latest_block_number': -1,
   'oar': cliConfiguration.oar,
   'node': {
@@ -889,9 +890,9 @@ function handleLog (log) {
       'id2': bridgeCore.ethUtil.stripHexPrefix(contractMyid),
       'proof_type': bridgeUtil.toInt(proofType),
       'context': {
-        'name': bridgeUtil.getContext({'prefix': BLOCKCHAIN_ABBRV, 'random': true}),
+        'name': oraclizeConfiguration.context_name,
         'protocol': BLOCKCHAIN_ABBRV.toLowerCase(),
-        'type': 'test',
+        'type': 'blockchain',
         'relative_timestamp': log['block_timestamp']
       }
     }
