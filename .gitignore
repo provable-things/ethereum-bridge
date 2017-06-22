@@ -8,3 +8,4 @@ config/db.json
 database/*
 config/instance/*
 !config/instance/.keep
+.node-xmlhttprequest-sync-*

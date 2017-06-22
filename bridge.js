@@ -529,7 +529,7 @@ function deployOraclize () {
   async.waterfall([
     function (callback) {
       var accountBalance = activeOracleInstance.checkAccountBalance()
-      var amountToPay = 500000000000000000 - accountBalance
+      var amountToPay = 1000000000000000000 - accountBalance
       if (amountToPay > 0) {
         logger.warn(activeOracleInstance.account, 'doesn\'t have enough funds to cover transaction costs, please send at least ' + parseFloat(amountToPay / 1e19) + ' ' + BLOCKCHAIN_BASE_UNIT)
         if (isTestRpc && cliConfiguration['non-interactive'] === false) {
