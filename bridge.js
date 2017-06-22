@@ -243,7 +243,9 @@ function oracleFromConfig (config) {
       logger.info('updating datasource pricing...')
       activeOracleInstance.multiAddDSource(activeOracleInstance.connector, config.onchain_config.pricing, function (err, res) {
         if (err) logger.error('multiAddDSource error', err)
-        else logger.info('multiAddDSource correctly updated')
+        else {
+          logger.info('multiAddDSource correctly updated')
+        }
       })
     }
 
