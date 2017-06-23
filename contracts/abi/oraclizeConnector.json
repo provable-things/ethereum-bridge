@@ -16,6 +16,13 @@
   "type": "function"
 }, {
   "constant": false,
+  "inputs": [],
+  "name": "onlyadmin",
+  "outputs": [],
+  "payable": false,
+  "type": "function"
+}, {
+  "constant": false,
   "inputs": [{
     "name": "_timestamp",
     "type": "uint256"
