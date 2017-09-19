@@ -1,3 +1,5 @@
+> Note that these are binaries running oraclize connector v1.1.1 which adds experimental offchain payment support
+
 ## Binary info
 
 ### oraclizeConnector.binary
