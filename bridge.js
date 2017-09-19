@@ -93,8 +93,11 @@ var logger = new (winston.Logger)({
         return moment().toISOString()
       },
       formatter: function (options) {
+        var multiLineFmt = (k, val) =>
+          (typeof val === 'string' && val.split('\n').length > 1) ? val.split('\n') : val;
+
         return '[' + colors.grey(options.timestamp()) + '] ' + bridgeUtil.colorize(options.level.toUpperCase()) + ' ' + (options.message ? options.message : '') +
-          (options.meta && Object.keys(options.meta).length ? '\n\t' + JSON.stringify(options.meta) : '')
+          (options.meta && Object.keys(options.meta).length ? '\n\t' + JSON.stringify(options.meta, multiLineFmt, 4) : '')
       }
     }),
     new (winston.transports.File)({
