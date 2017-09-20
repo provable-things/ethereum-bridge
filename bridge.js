@@ -163,11 +163,11 @@ var oraclizeConfiguration = {
     }
   },
   'deterministic_oar': !cliConfiguration['disable-deterministic-oar'],
-  'deploy_gas': cliConfiguration.defaultGas,
+  'deploy_gas': parseInt(cliConfiguration.defaultGas),
   'account': cliConfiguration.account,
   'mode': mode,
   'key_file': keyFilePath,
-  'gas_price': cliConfiguration.gasprice
+  'gas_price': parseInt(cliConfiguration.gasprice)
 }
 
 if (cliConfiguration.abiconn || cliConfiguration.abioar) {
