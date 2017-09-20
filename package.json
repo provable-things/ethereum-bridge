@@ -1,6 +1,6 @@
 {
   "name": "ethereum-bridge",
-  "version": "0.5.4",
+  "version": "0.5.5",
   "description": "Ethereum logs listener to connect Oraclize onchain events to the Oraclize offchain engine",
   "main": "bridge.js",
   "dependencies": {
@@ -40,7 +40,7 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "engines": {
-    "node": ">=5.0.0 <7.0.0"
+    "node": ">=5.0.0"
   },
   "author": "Oraclize Ltd.",
   "license": "AGPL-3.0",

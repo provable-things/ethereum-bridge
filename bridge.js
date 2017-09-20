@@ -18,7 +18,7 @@ var AddressWatcher = require('./lib/address-watcher')
 var winston = require('winston')
 var colors = bridgeUtil.colors
 var async = require('async')
-var callbackQueue = async.queue(__callbackWrapper, 1)
+var callbackQueue = async.queue(__callbackWrapper, 2)
 var logsQueue = async.queue(logsWrapper, 1)
 var fs = require('fs')
 var path = require('path')
@@ -638,11 +638,13 @@ function checkVersion () {
     console.error('Not compatible with ' + prVersion + ' of nodejs, please use at least v5.0.0')
     console.log('exiting...')
     process.exit(1)
-  } else if (prVersion.substr(1, 1) > 7) {
+  }
+    // only check that Node isn't below v5. Appears to work fine with v8+
+  /*} else if (prVersion.substr(1, 1) > 7) {
     console.error('Not compatible with ' + prVersion + ' of nodejs, please use v6.9.1 or a lower version')
     console.log('exiting...')
     process.exit(1)
-  }
+  }*/
 }
 
 function runLog () {
@@ -1058,6 +1060,7 @@ function queryComplete (queryComplObj) {
       var ttlTx = cliConfiguration.dev === true ? 1 : 100
       BridgeCache.set(callbackObj.myid + '__callback', true, ttlTx)
       logger.info('sending __callback tx...', {'contract_myid': callbackObj.myid, 'contract_address': callbackObj.contract_address})
+      // Without concurrency, this sometimes never seems to reach the queue
       callbackQueue.push(callbackObj, function (err) {
         if (err) logger.error('Callback queue error', err)
       })
