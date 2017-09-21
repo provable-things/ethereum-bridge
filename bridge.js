@@ -232,7 +232,8 @@ function oracleFromConfig (config) {
       config.onchain_config.pricing = pricingInfo
       config.onchain_config.base_price = basePrice
     }
-    config.gas_price = cliConfiguration.gasprice
+    // Will use gas_price set in conf, unless there is none, or will be overriden if CLI provided gasprice is greater
+    config.gas_price = !isNaN(config.gas_price) && config.gas_price >= cliConfiguration.gasprice ? config.gas_price : cliConfiguration.gasprice
     logger.debug('configuration file', config)
     activeOracleInstance = new OracleInstance(config)
     checkNodeConnection()
