@@ -4,7 +4,7 @@ This tool enables any non-public blockchain instance to interact with the Oracli
 _Please note that at this point this tool is still **experimental** and subject to change without notice._
 
 ### Requirements
-- node version **>= 5.0.0 < 7.0.0** (& npm)
+- node version **>= 5.0.0** (& npm)
 
 Suggested version: node 6.9.1
 
@@ -65,12 +65,12 @@ Where `EnterYourOarCustomAddress` is the address resolver generated when you hav
 ```
 contract test() {
     ...
-    
+
     function test() {
       // this is the constructor
       OAR = OraclizeAddrResolverI(0xf0f20d1a90c618163d762f9f09baa003a60adeff);
     }
-  
+
     ...
 }
 ```
@@ -100,7 +100,7 @@ If a new version is detected you can run `npm run update` to automatically donwl
   * `-H` : change the default node (localhost:8545)
   * `-p` : change the default PORT (8545) on localhost
   * `--url` : change the default node with an url (http://localhost:8545)
-  * `--key` : change the default key path (./config/instance/keys.json) i.e. `--key /home/user/keys.json` 
+  * `--key` : change the default key path (./config/instance/keys.json) i.e. `--key /home/user/keys.json`
   * `--gas` : change the default gas limit (3000000) used to deploy contracts
   * `--resume` : resume all skipped queries
   * `--skip` : skip all pending queries
