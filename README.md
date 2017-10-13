@@ -13,6 +13,8 @@ Suggested version: node 6.9.1
 
 run `sudo apt-get install build-essential -y`
 
+You should run the following commands from within the ethereum-bridge folder.
+
 ### Install
 ```
 npm install
