@@ -10,3 +10,4 @@ config/db.json
 database/*
 config/instance/*
 !config/instance/.keep
+.idea/
