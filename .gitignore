@@ -3,7 +3,6 @@ keys.json
 *.log
 *.tmp
 *.swp
-*.lock
 .node*
 config/db.json
 !database/.keep
