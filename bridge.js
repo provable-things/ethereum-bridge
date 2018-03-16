@@ -143,7 +143,7 @@ logger.info('you are running ' + BRIDGE_NAME, '- version: ' + BRIDGE_VERSION)
 logger.info('saving logs to:', cliConfiguration.logFilePath)
 
 var oraclizeConfiguration = {
-  'context_name': bridgeUtil.getContext({'prefix': BLOCKCHAIN_ABBRV, 'random': true}),
+  'context_name': cliConfiguration.context || bridgeUtil.getContext({'prefix': BLOCKCHAIN_ABBRV, 'random': true}),
   'latest_block_number': -1,
   'oar': cliConfiguration.oar,
   'node': {
