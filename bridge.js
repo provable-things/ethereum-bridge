@@ -632,7 +632,7 @@ function deployOraclize () {
 
 function checkVersion () {
   var prVersion = process.version
-  if (prVersion.substr(1, 1) === '0' || prVersion.substr(1, 1) < 5) {
+  if (prVersion.replace('v', '').split('.')[0] < 5) {
     console.error('Not compatible with ' + prVersion + ' of nodejs, please use at least v5.0.0')
     console.log('exiting...')
     process.exit(1)
