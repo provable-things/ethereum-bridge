@@ -412,7 +412,11 @@ function importConfigFile (instanceToLoad) {
 function loadConfigFile (file) {
   var configFile = bridgeUtil.loadLocalJson(file)
   if (typeof configFile.mode !== 'undefined' && typeof configFile.account !== 'undefined' && typeof configFile.oar !== 'undefined' && typeof configFile.node !== 'undefined') {
-    oraclizeConfiguration = configFile
+    oraclizeConfiguration = Object.assign({}, oraclizeConfiguration, configFile)
+    if (cliConfiguration.context)
+      oraclizeConfiguration.context_name = cliConfiguration.context
+    if (cliConfiguration.gasprice)
+      oraclizeConfiguration.gas_price = parseInt(cliConfiguration.gasprice)
     mode = configFile.mode
     cliConfiguration.defaultnode = configFile.node.main
     startUpLog(false, configFile)
