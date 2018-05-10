@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+var semver = require('semver')
 checkVersion()
 var readline = require('readline')
 var i18n = require('i18n')
@@ -632,7 +633,7 @@ function deployOraclize () {
 
 function checkVersion () {
   var prVersion = process.version
-  if (prVersion.substr(1, 1) === '0' || prVersion.substr(1, 1) < 5) {
+  if (semver.lt(semver.clean(prVersion), '5.0.0')) {
     console.error('Not compatible with ' + prVersion + ' of nodejs, please use at least v5.0.0')
     console.log('exiting...')
     process.exit(1)
