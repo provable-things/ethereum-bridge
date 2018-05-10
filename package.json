@@ -1,8 +1,11 @@
 {
   "name": "ethereum-bridge",
-  "version": "0.5.5",
+  "version": "0.6.0-alpha.1",
   "description": "Ethereum logs listener to connect Oraclize onchain events to the Oraclize offchain engine",
   "main": "bridge.js",
+  "bin": {
+    "ethereum-bridge": "bridge.js"
+  },
   "dependencies": {
     "asn1": "0.2.3",
     "async": "^2.4.1",
@@ -43,7 +46,10 @@
   "engines": {
     "node": ">=5.0.0"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oraclize/ethereum-bridge.git"
+  },
   "author": "Oraclize Ltd.",
-  "license": "AGPL-3.0",
-  "private": true
+  "license": "AGPL-3.0"
 }
