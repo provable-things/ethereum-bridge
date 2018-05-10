@@ -101,7 +101,7 @@ arrify@^1.0.0:
   version "1.0.1"
   resolved "https://registry.yarnpkg.com/arrify/-/arrify-1.0.1.tgz#898508da2226f380df904728456849c1501a4b0d"
 
-asn1@0.2.3, asn1@~0.2.3:
+asn1@~0.2.3:
   version "0.2.3"
   resolved "https://registry.yarnpkg.com/asn1/-/asn1-0.2.3.tgz#dac8787713c9966849fc8180777ebe9c1ddf3b86"
 
@@ -578,7 +578,7 @@ bip66@^1.1.3:
   dependencies:
     safe-buffer "^5.0.1"
 
-bitcore-lib@0.14.0, bitcore-lib@^0.14.0:
+bitcore-lib@^0.14.0:
   version "0.14.0"
   resolved "https://registry.yarnpkg.com/bitcore-lib/-/bitcore-lib-0.14.0.tgz#21cb2359fe7b997a3b7b773eb7d7275ae37d644e"
   dependencies:
@@ -588,13 +588,6 @@ bitcore-lib@0.14.0, bitcore-lib@^0.14.0:
     elliptic "=3.0.3"
     inherits "=2.0.1"
     lodash "=3.10.1"
-
-bitcore-mnemonic@1.2.3:
-  version "1.2.3"
-  resolved "https://registry.yarnpkg.com/bitcore-mnemonic/-/bitcore-mnemonic-1.2.3.tgz#007bf30a12dfa6c920cddc72f864c0bf2b272afa"
-  dependencies:
-    bitcore-lib "^0.14.0"
-    unorm "^1.3.3"
 
 bitcore-mnemonic@^1.2.2:
   version "1.2.5"
@@ -781,10 +774,6 @@ code-point-at@^1.0.0:
 coffee-script@^1.12.5:
   version "1.12.7"
   resolved "https://registry.yarnpkg.com/coffee-script/-/coffee-script-1.12.7.tgz#c05dae0cb79591d05b3070a8433a98c9a89ccc53"
-
-colorize@^0.1.0:
-  version "0.1.0"
-  resolved "https://registry.yarnpkg.com/colorize/-/colorize-0.1.0.tgz#9a567428fc581ca2fe0baf10aec7c7969150608a"
 
 colors@1.0.x:
   version "1.0.3"
