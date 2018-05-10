@@ -10,3 +10,4 @@ database/*
 config/instance/*
 !database/.keep
 !config/instance/.keep
+!yarn.lock
