@@ -144,7 +144,7 @@ logger.info('you are running ' + BRIDGE_NAME, '- version: ' + BRIDGE_VERSION)
 logger.info('saving logs to:', cliConfiguration.logFilePath)
 
 var oraclizeConfiguration = {
-  'context_name': bridgeUtil.getContext({'prefix': BLOCKCHAIN_ABBRV, 'random': true}),
+  'context_name': cliConfiguration.context || bridgeUtil.getContext({'prefix': BLOCKCHAIN_ABBRV, 'random': true}),
   'latest_block_number': -1,
   'oar': cliConfiguration.oar,
   'node': {
@@ -413,7 +413,11 @@ function importConfigFile (instanceToLoad) {
 function loadConfigFile (file) {
   var configFile = bridgeUtil.loadLocalJson(file)
   if (typeof configFile.mode !== 'undefined' && typeof configFile.account !== 'undefined' && typeof configFile.oar !== 'undefined' && typeof configFile.node !== 'undefined') {
-    oraclizeConfiguration = configFile
+    oraclizeConfiguration = Object.assign({}, oraclizeConfiguration, configFile)
+    if (cliConfiguration.context)
+      oraclizeConfiguration.context_name = cliConfiguration.context
+    if (cliConfiguration.gasprice)
+      oraclizeConfiguration.gas_price = parseInt(cliConfiguration.gasprice)
     mode = configFile.mode
     cliConfiguration.defaultnode = configFile.node.main
     startUpLog(false, configFile)
@@ -654,7 +658,7 @@ function runLog () {
   else console.log('\nPlease add this line to your contract constructor:\n\n' + 'OAR = OraclizeAddrResolverI(' + checksumOar + ');\n')
 
   logger.debug('starting the bridge log manager...')
-  BridgeLogManager = BridgeLogManager.init()
+  BridgeLogManager = BridgeLogManager.init(cliConfiguration)
 
   var latestBlockMemory = activeOracleInstance.latestBlockNumber
 
