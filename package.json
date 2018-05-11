@@ -1,6 +1,6 @@
 {
   "name": "ethereum-bridge",
-  "version": "0.6.0-alpha.3",
+  "version": "0.6.0-beta",
   "description": "Ethereum logs listener to connect Oraclize onchain events to the Oraclize offchain engine",
   "main": "bridge.js",
   "bin": {
