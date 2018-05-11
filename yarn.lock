@@ -578,7 +578,7 @@ bip66@^1.1.3:
   dependencies:
     safe-buffer "^5.0.1"
 
-bitcore-lib@^0.14.0:
+bitcore-lib@0.14.0, bitcore-lib@^0.14.0:
   version "0.14.0"
   resolved "https://registry.yarnpkg.com/bitcore-lib/-/bitcore-lib-0.14.0.tgz#21cb2359fe7b997a3b7b773eb7d7275ae37d644e"
   dependencies:
@@ -588,6 +588,13 @@ bitcore-lib@^0.14.0:
     elliptic "=3.0.3"
     inherits "=2.0.1"
     lodash "=3.10.1"
+
+bitcore-mnemonic@1.2.3:
+  version "1.2.3"
+  resolved "https://registry.yarnpkg.com/bitcore-mnemonic/-/bitcore-mnemonic-1.2.3.tgz#007bf30a12dfa6c920cddc72f864c0bf2b272afa"
+  dependencies:
+    bitcore-lib "^0.14.0"
+    unorm "^1.3.3"
 
 bitcore-mnemonic@^1.2.2:
   version "1.2.5"

@@ -8,6 +8,8 @@
   },
   "dependencies": {
     "async": "^2.4.1",
+    "bitcore-lib": "0.14.0",
+    "bitcore-mnemonic": "1.2.3",
     "borc": "^2.0.2",
     "caminte": "0.3.7",
     "colors": "^1.1.2",
