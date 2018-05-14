@@ -722,7 +722,7 @@ function runLog () {
   if (!isTestRpc && !cliConfiguration.dev) checkCallbackTxs()
 
   AddressWatcher({'address': activeOracleInstance.account, 'logger': logger, 'balance_limit': 10000000000000000})
-  AddressWatcher().init()
+  if (!cliConfiguration['disable-address-watcher']) AddressWatcher().init()
 }
 
 function fetchPlatform () {
