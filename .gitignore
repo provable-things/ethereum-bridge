@@ -3,10 +3,10 @@ keys.json
 *.log
 *.tmp
 *.swp
-*.lock
 .node*
 config/db.json
-!database/.keep
 database/*
 config/instance/*
+!database/.keep
 !config/instance/.keep
+!yarn.lock

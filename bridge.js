@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+var semver = require('semver')
 checkVersion()
 var readline = require('readline')
 var i18n = require('i18n')
@@ -30,14 +31,14 @@ var activeOracleInstance
 
 var dbConfig = {
   'driver': 'tingodb',
-  'database': path.resolve(__dirname, './database/tingodb/')
+  'database': toFullPath('./database/tingodb/')
 }
 
 i18n.configure({
   defaultLocale: 'ethereum',
   updateFiles: false,
   objectNotation: true,
-  directory: './config/text'
+  directory: toFullPath('./config/text/')
 })
 
 var BLOCKCHAIN_NAME = i18n.__('blockchain_name')
@@ -143,7 +144,7 @@ logger.info('you are running ' + BRIDGE_NAME, '- version: ' + BRIDGE_VERSION)
 logger.info('saving logs to:', cliConfiguration.logFilePath)
 
 var oraclizeConfiguration = {
-  'context_name': bridgeUtil.getContext({'prefix': BLOCKCHAIN_ABBRV, 'random': true}),
+  'context_name': cliConfiguration.context || bridgeUtil.getContext({'prefix': BLOCKCHAIN_ABBRV, 'random': true}),
   'latest_block_number': -1,
   'oar': cliConfiguration.oar,
   'node': {
@@ -209,7 +210,7 @@ if (cliConfiguration.instance) {
 }
 
 function getInstances () {
-  var instances = fs.readdirSync('./config/instance/')
+  var instances = fs.readdirSync(toFullPath('./config/instance/'))
   var instanceKeyIndex = instances.indexOf('keys.json')
   if (instanceKeyIndex > -1) {
     instances.splice(instanceKeyIndex, 1)
@@ -412,7 +413,11 @@ function importConfigFile (instanceToLoad) {
 function loadConfigFile (file) {
   var configFile = bridgeUtil.loadLocalJson(file)
   if (typeof configFile.mode !== 'undefined' && typeof configFile.account !== 'undefined' && typeof configFile.oar !== 'undefined' && typeof configFile.node !== 'undefined') {
-    oraclizeConfiguration = configFile
+    oraclizeConfiguration = Object.assign({}, oraclizeConfiguration, configFile)
+    if (cliConfiguration.context)
+      oraclizeConfiguration.context_name = cliConfiguration.context
+    if (cliConfiguration.gasprice)
+      oraclizeConfiguration.gas_price = parseInt(cliConfiguration.gasprice)
     mode = configFile.mode
     cliConfiguration.defaultnode = configFile.node.main
     startUpLog(false, configFile)
@@ -632,7 +637,7 @@ function deployOraclize () {
 
 function checkVersion () {
   var prVersion = process.version
-  if (prVersion.substr(1, 1) === '0' || prVersion.substr(1, 1) < 5) {
+  if (semver.lt(semver.clean(prVersion), '5.0.0')) {
     console.error('Not compatible with ' + prVersion + ' of nodejs, please use at least v5.0.0')
     console.log('exiting...')
     process.exit(1)
@@ -653,7 +658,7 @@ function runLog () {
   else console.log('\nPlease add this line to your contract constructor:\n\n' + 'OAR = OraclizeAddrResolverI(' + checksumOar + ');\n')
 
   logger.debug('starting the bridge log manager...')
-  BridgeLogManager = BridgeLogManager.init()
+  BridgeLogManager = BridgeLogManager.init(cliConfiguration)
 
   var latestBlockMemory = activeOracleInstance.latestBlockNumber
 
@@ -1268,11 +1273,11 @@ process.on('exit', function () {
    activeOracleInstance.connector &&
    activeOracleInstance.oar &&
    activeOracleInstance.account) {
-    var oracleInstancePath = path.resolve('./config/instance/', currentInstance)
+    var oracleInstancePath = path.resolve(toFullPath('./config/instance/'), currentInstance)
     var oracleInstanceTemp = JSON.parse(fs.readFileSync(oracleInstancePath).toString())
     oracleInstanceTemp.latest_block_number = activeOracleInstance.latestBlockNumber
     fs.writeFileSync(oracleInstancePath, JSON.stringify(oracleInstanceTemp, null, 4))
-    if (cliConfiguration['no-hints'] === false) console.log('To load this instance again: node bridge --instance ' + currentInstance)
+    if (cliConfiguration['no-hints'] === false) console.log('To load this instance again: ethereum-bridge --instance ' + currentInstance)
   }
   console.log('Exiting...')
 })
