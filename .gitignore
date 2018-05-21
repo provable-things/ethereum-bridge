@@ -6,7 +6,8 @@ keys.json
 *.lock
 .node*
 config/db.json
-!database/.keep
 database/*
 config/instance/*
+!database/.keep
 !config/instance/.keep
+!yarn.lock
