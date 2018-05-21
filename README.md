@@ -1,3 +1,5 @@
+# MERGED INTO MASTER... DELETE WHEN READY
+
 ## Description
 This tool enables any non-public blockchain instance to interact with the Oraclize service.
 
