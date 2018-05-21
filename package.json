@@ -1,11 +1,21 @@
 {
   "name": "ethereum-bridge",
-  "version": "0.6.0-beta",
+  "version": "0.6.0-beta.1",
   "description": "Ethereum logs listener to connect Oraclize onchain events to the Oraclize offchain engine",
   "main": "bridge.js",
   "bin": {
     "ethereum-bridge": "bridge.js"
   },
+  "keywords": [
+      "oraclize",
+      "provable",
+      "blockchain",
+      "bridge",
+      "ethereum",
+      "rootstock",
+      "evm",
+      "data carrier"
+  ],
   "dependencies": {
     "async": "^2.4.1",
     "bitcore-lib": "0.14.0",
