@@ -98,7 +98,7 @@ var logger = new (winston.Logger)({
           (typeof val === 'string' && val.split('\n').length > 1) ? val.split('\n') : val;
 
         return '[' + colors.grey(options.timestamp()) + '] ' + bridgeUtil.colorize(options.level.toUpperCase()) + ' ' + (options.message ? options.message : '') +
-          (options.meta && Object.keys(options.meta).length ? '\n\t' + JSON.stringify(options.meta, multiLineFmt, 4) : '')
+          (options.meta && Object.keys(options.meta).length ? JSON.stringify(options.meta) : '')
       }
     }),
     new (winston.transports.File)({
