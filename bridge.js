@@ -81,6 +81,7 @@ var cliOptions = {
 BridgeCliParse(cliOptions)
 
 var cliConfiguration = BridgeCliParse().getConfiguration()
+BridgeLogManager.passCliConf(cliConfiguration)
 
 console.log('Please wait...')
 
