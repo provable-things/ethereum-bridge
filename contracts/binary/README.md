@@ -2,7 +2,7 @@
 
 ### oraclizeConnector.binary
 
-Compiler version: 0.4.11-68ef5810
+Compiler version: v0.4.15+commit.bbb8e64f (same as mainnet deployed as of 2018/3)
 
 Optimization: Enabled
 
