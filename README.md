@@ -128,3 +128,4 @@ If a new version is detected you can run `npm run update` to automatically donwl
   ##### Advanced/Internal
   * `--minimum-gas-price` : set minimum gas price to accept for queries, else ignore them.
   * `--connector-gas-price` : set detault gas price to set in connector state.
+  * `--disable-address-watcher` : disable the address watcher because low RSK gas prices allow much lower balances for the callback address(es).
