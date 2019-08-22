@@ -145,7 +145,7 @@ logger.info('you are running ' + BRIDGE_NAME, '- version: ' + BRIDGE_VERSION)
 logger.info('saving logs to:', cliConfiguration.logFilePath)
 
 var oraclizeConfiguration = {
-  'context_name': bridgeUtil.getContext({'prefix': BLOCKCHAIN_ABBRV, 'random': true}),
+  'context_name': cliConfiguration.context || bridgeUtil.getContext({'prefix': BLOCKCHAIN_ABBRV, 'random': true}),
   'latest_block_number': -1,
   'oar': cliConfiguration.oar,
   'node': {
@@ -414,7 +414,11 @@ function importConfigFile (instanceToLoad) {
 function loadConfigFile (file) {
   var configFile = bridgeUtil.loadLocalJson(file)
   if (typeof configFile.mode !== 'undefined' && typeof configFile.account !== 'undefined' && typeof configFile.oar !== 'undefined' && typeof configFile.node !== 'undefined') {
-    oraclizeConfiguration = configFile
+    oraclizeConfiguration = Object.assign({}, oraclizeConfiguration, configFile)
+    if (cliConfiguration.context)
+      oraclizeConfiguration.context_name = cliConfiguration.context
+    if (cliConfiguration.gasprice)
+      oraclizeConfiguration.gas_price = parseInt(cliConfiguration.gasprice)
     mode = configFile.mode
     cliConfiguration.defaultnode = configFile.node.main
     startUpLog(false, configFile)
@@ -532,7 +536,7 @@ function deployOraclize () {
   async.waterfall([
     function (callback) {
       var accountBalance = activeOracleInstance.checkAccountBalance()
-      var amountToPay = 500000000000000000 - accountBalance
+      var amountToPay = oraclizeConfiguration['gas_price'] * 20e6 - accountBalance
       if (amountToPay > 0) {
         logger.warn(activeOracleInstance.account, 'doesn\'t have enough funds to cover transaction costs, please send at least ' + parseFloat(amountToPay / 1e19) + ' ' + BLOCKCHAIN_BASE_UNIT)
         if (isTestRpc && cliConfiguration['non-interactive'] === false) {
@@ -648,6 +652,14 @@ function checkVersion () {
 }
 
 function runLog () {
+  // if gas price cli set, set it in contract
+  if (cliConfiguration.conGasPrice) {
+    activeOracleInstance.setGasPriceInGwei(activeOracleInstance.connector, cliConfiguration.conGasPrice, function (err, res) {
+      if (err) return logger.error('update connector gas price error', err)
+      else logger.info('connector gas price updated to', cliConfiguration.conGasPrice, 'gwei')
+    })
+  }
+
   if (officialOar.length === 1 && cliConfiguration['no-hints'] === false) logger.info('an "official" Oraclize address resolver was found on your blockchain:', officialOar[0], 'you can use that instead and quit the bridge')
 
   var checksumOar = bridgeCore.ethUtil.toChecksumAddress(activeOracleInstance.oar)
@@ -711,7 +723,7 @@ function runLog () {
   if (!isTestRpc && !cliConfiguration.dev) checkCallbackTxs()
 
   AddressWatcher({'address': activeOracleInstance.account, 'logger': logger, 'balance_limit': 10000000000000000})
-  AddressWatcher().init()
+  if (!cliConfiguration['disable-address-watcher']) AddressWatcher().init()
 }
 
 function fetchPlatform () {

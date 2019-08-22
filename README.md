@@ -123,4 +123,9 @@ If a new version is detected you can run `npm run update` to automatically donwl
   * `--loglevel` : change the default log level (available: 'error', 'warn', 'info', 'verbose', 'debug', 'stats') default: 'info'
   * `--non-interactive` : disable the interactive mode
   * `--no-hints` : disable logs hints
-  * `--gasprice` : set custom gas price
+  * `--gasprice` : set custom gas price for contracts deployment + interactions
+
+  ##### Advanced/Internal
+  * `--minimum-gas-price` : set minimum gas price to accept for queries, else ignore them.
+  * `--connector-gas-price` : set detault gas price to set in connector state.
+  * `--disable-address-watcher` : disable the address watcher because low RSK gas prices allow much lower balances for the callback address(es).
