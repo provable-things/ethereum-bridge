@@ -667,7 +667,7 @@ function runLog () {
   else console.log('\nPlease add this line to your contract constructor:\n\n' + 'OAR = OraclizeAddrResolverI(' + checksumOar + ');\n')
 
   logger.debug('starting the bridge log manager...')
-  BridgeLogManager = BridgeLogManager.init(cliConfiguration)
+  BridgeLogManager = BridgeLogManager.init()
 
   var latestBlockMemory = activeOracleInstance.latestBlockNumber
 
