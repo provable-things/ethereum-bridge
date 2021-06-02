@@ -652,7 +652,7 @@ function runLog () {
 
   var checksumOar = bridgeCore.ethUtil.toChecksumAddress(activeOracleInstance.oar)
   if (checksumOar === '0x6f485C8BF6fc43eA212E93BBF8ce046C7f1cb475' && !isTestRpc) logger.info('you are using a deterministic OAR, you don\'t need to update your contract')
-  else console.log('\nPlease add this line to your contract constructor:\n\n' + 'OAR = OraclizeAddrResolverI(' + checksumOar + ');\n')
+  else console.log('\nPlease add this line to your contract constructor:\n\n' + 'OAR = OracleAddrResolverI(' + checksumOar + ');\n')
 
   logger.debug('starting the bridge log manager...')
   BridgeLogManager = BridgeLogManager.init()

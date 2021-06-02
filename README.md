@@ -67,7 +67,7 @@ ethereum-bridge -H localhost:8545 --broadcast -a 0
 
 #### Add a custom address resolver
 
-Add `OAR = OraclizeAddrResolverI(EnterYourOarCustomAddress);` to your contract constructor, example:
+Add `OAR = OracleAddrResolverI(EnterYourOarCustomAddress);` to your contract constructor, example:
 
 Where `EnterYourOarCustomAddress` is the address resolver generated when you have run the script
 ```
@@ -76,7 +76,7 @@ contract test() {
 
     function test() {
       // this is the constructor
-      OAR = OraclizeAddrResolverI(0xf0f20d1a90c618163d762f9f09baa003a60adeff);
+      OAR = OracleAddrResolverI(0xf0f20d1a90c618163d762f9f09baa003a60adeff);
     }
 
     ...
