@@ -17,7 +17,7 @@
     "data carrier"
   ],
   "dependencies": {
-    "async": "^2.4.1",
+    "async": "^3.2.2",
     "borc": "^2.0.2",
     "caminte": "0.3.7",
     "colors": "^1.1.2",
